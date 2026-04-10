@@ -1,0 +1,136 @@
+{{/* helm/templates/clients.yaml */}}
+{{/* Generates one Deployment + 2 PVCs for every bank in .Values.clients */}}
+
+{{- range .Values.clients }}
+{{- $bankSlug := .id | replace "_" "-" }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fl-client-{{ $bankSlug }}
+  namespace: {{ $.Values.global.namespace }}
+  labels:
+    app:  fl-client
+    bank: {{ $bankSlug }}
+    fault-scenario: {{ .fault }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app:  fl-client
+      bank: {{ $bankSlug }}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app:  fl-client
+        bank: {{ $bankSlug }}
+        fault-scenario: {{ .fault }}
+    spec:
+      serviceAccountName: fl-client-sa
+      terminationGracePeriodSeconds: 120
+      nodeSelector:
+        bank-node: "true"
+      containers:
+        - name: fl-client
+          image: "{{ $.Values.global.dockerUsername }}/fl-client:{{ $.Values.global.imageTag }}"
+          imagePullPolicy: Always
+          env:
+            - name:  BANK_ID
+              value: "{{ .id }}"
+            - name:  BANK_NAME
+              value: "{{ .name }}"
+            - name:  FL_SERVER_URL
+              value: "http://fl-server-service:{{ $.Values.server.port }}"
+            - name:  POLL_INTERVAL_SECONDS
+              value: "{{ $.Values.training.pollInterval }}"
+            - name:  LOCAL_EPOCHS
+              value: "{{ $.Values.training.localEpochs }}"
+            - name:  BATCH_SIZE
+              value: "{{ $.Values.training.batchSize }}"
+            - name:  LEARNING_RATE
+              value: "{{ $.Values.training.learningRate }}"
+            - name:  INPUT_DIM
+              value: "{{ $.Values.server.model.inputDim }}"
+            - name:  S3_BUCKET
+              value: "{{ $.Values.aws.s3Bucket }}"
+            - name:  AWS_REGION
+              value: "{{ $.Values.global.awsRegion }}"
+            - name:  USE_LOCAL_STORAGE
+              value: "{{ $.Values.aws.useLocalStorage }}"
+            - name:  DP_EPSILON
+              value: "{{ $.Values.server.dp.epsilon }}"
+            - name:  DP_DELTA
+              value: "{{ $.Values.server.dp.delta }}"
+            - name:  DP_CLIP_NORM
+              value: "{{ $.Values.server.dp.clipNorm }}"
+          envFrom:
+            - secretRef:
+                name: fl-secrets
+          resources:
+            requests:
+              cpu:    {{ .resources.requests.cpu }}
+              memory: {{ .resources.requests.memory }}
+            limits:
+              cpu:    {{ .resources.limits.cpu }}
+              memory: {{ .resources.limits.memory }}
+          livenessProbe:
+            exec:
+              command: ["pgrep", "-f", "watcher.py"]
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          volumeMounts:
+            - name: bank-input
+              mountPath: /data/input
+            - name: bank-processed
+              mountPath: /data/processed
+            - name: bank-error
+              mountPath: /data/error
+            - name: tmp-storage
+              mountPath: /tmp/fl-client
+      volumes:
+        - name: bank-input
+          persistentVolumeClaim:
+            claimName: pvc-{{ $bankSlug }}-input
+        - name: bank-processed
+          persistentVolumeClaim:
+            claimName: pvc-{{ $bankSlug }}-done
+        - name: bank-error
+          emptyDir: {}
+        - name: tmp-storage
+          emptyDir: {}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-{{ $bankSlug }}-input
+  namespace: {{ $.Values.global.namespace }}
+spec:
+  accessModes:    [ReadWriteOnce]
+  storageClassName: {{ $.Values.storage.storageClass }}
+  resources:
+    requests:
+      storage: {{ $.Values.storage.inputPvcSize }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-{{ $bankSlug }}-done
+  namespace: {{ $.Values.global.namespace }}
+spec:
+  accessModes:    [ReadWriteOnce]
+  storageClassName: {{ $.Values.storage.storageClass }}
+  resources:
+    requests:
+      storage: {{ $.Values.storage.processedPvcSize }}
+{{- end }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fl-client-sa
+  namespace: {{ .Values.global.namespace }}
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::{{ .Values.global.awsAccountId }}:role/fl-client-role"

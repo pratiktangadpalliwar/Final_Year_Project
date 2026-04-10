@@ -1,0 +1,128 @@
+# ═══════════════════════════════════════════════════════════════════
+# fl-project Helm Values
+# Single source of truth — override per environment.
+#
+# Production:   helm install fl ./helm -f values-prod.yaml
+# Development:  helm install fl ./helm -f values-dev.yaml
+# ═══════════════════════════════════════════════════════════════════
+
+# ── Global ─────────────────────────────────────────────────────────
+global:
+  namespace:     federated-learning
+  dockerUsername: YOUR_DOCKERHUB_USERNAME   # set before deploying
+  imageTag:      latest
+  awsRegion:     us-east-1
+  awsAccountId:  "123456789012"             # replace with yours
+
+# ── FL Server ──────────────────────────────────────────────────────
+server:
+  image:          "{{ .Values.global.dockerUsername }}/fl-server"
+  tag:            "{{ .Values.global.imageTag }}"
+  replicas:       2
+  port:           8080
+
+  resources:
+    requests: { cpu: "500m",  memory: "512Mi" }
+    limits:   { cpu: "2000m", memory: "2Gi"   }
+
+  autoscaling:
+    enabled:     true
+    minReplicas: 2
+    maxReplicas: 6
+    cpuTarget:   70
+    memTarget:   80
+
+  fl:
+    minNodes:           3
+    maxRounds:          50
+    quorumPct:          "0.6"
+    rollbackThreshold:  "0.05"
+    roundTimeout:       300
+
+  dp:
+    epsilon:   "5.0"
+    delta:     "1e-5"
+    clipNorm:  "0.5"
+
+  model:
+    inputDim:   19
+    hiddenDims: "64,32,16"
+
+# ── Bank Nodes ─────────────────────────────────────────────────────
+# Add or remove entries to add/remove bank nodes.
+# Each entry becomes one Kubernetes Deployment + PVC.
+clients:
+  - id:         bank_01_retail_urban
+    name:       "MetroRetail Bank"
+    fault:      node_crash
+    resources:
+      requests: { cpu: "1000m", memory: "2Gi" }
+      limits:   { cpu: "4000m", memory: "8Gi" }
+
+  - id:         bank_02_corporate
+    name:       "CorpFinance Bank"
+    fault:      straggler
+    resources:
+      requests: { cpu: "1000m", memory: "2Gi" }
+      limits:   { cpu: "4000m", memory: "8Gi" }
+
+  - id:         bank_03_regional_rural
+    name:       "Heartland Community Bank"
+    fault:      network_partition
+    resources:
+      requests: { cpu: "500m",  memory: "1Gi" }
+      limits:   { cpu: "2000m", memory: "4Gi" }
+
+  - id:         bank_04_neobank_digital
+    name:       "NeoVault Digital Bank"
+    fault:      byzantine
+    resources:
+      requests: { cpu: "1000m", memory: "2Gi" }
+      limits:   { cpu: "4000m", memory: "8Gi" }
+
+  - id:         bank_05_international
+    name:       "GlobalTrade Bank"
+    fault:      dropout_rejoin
+    resources:
+      requests: { cpu: "1000m", memory: "2Gi" }
+      limits:   { cpu: "4000m", memory: "8Gi" }
+
+  - id:         bank_06_credit_union
+    name:       "SafeHarbor Credit Union"
+    fault:      none
+    resources:
+      requests: { cpu: "500m",  memory: "1Gi" }
+      limits:   { cpu: "2000m", memory: "4Gi" }
+
+  - id:         bank_07_investment_premium
+    name:       "PinnacleWealth Bank"
+    fault:      none
+    resources:
+      requests: { cpu: "1000m", memory: "2Gi" }
+      limits:   { cpu: "4000m", memory: "8Gi" }
+
+# ── AWS Infrastructure ─────────────────────────────────────────────
+aws:
+  s3Bucket:       fl-models-prod
+  dynamodbTable:  fl-rounds
+  sqsQueue:       fl-updates
+  useLocalStorage: false
+
+# ── Storage ────────────────────────────────────────────────────────
+storage:
+  inputPvcSize:     10Gi
+  processedPvcSize: 20Gi
+  storageClass:     gp2
+
+# ── Training hyperparameters ───────────────────────────────────────
+training:
+  localEpochs:   10
+  batchSize:     512
+  learningRate:  "0.001"
+  pollInterval:  10
+
+# ── Ingress ────────────────────────────────────────────────────────
+ingress:
+  enabled:  true
+  host:     fl-server.YOUR_DOMAIN.com
+  certArn:  "REPLACE_WITH_ACM_CERT_ARN"

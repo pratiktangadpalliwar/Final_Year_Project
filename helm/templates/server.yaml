@@ -1,0 +1,154 @@
+{{/* helm/templates/server-deployment.yaml */}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fl-server
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: fl-server
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+spec:
+  replicas: {{ .Values.server.replicas }}
+  selector:
+    matchLabels:
+      app: fl-server
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: fl-server
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: fl-server
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values: [fl-server]
+              topologyKey: kubernetes.io/hostname
+      serviceAccountName: fl-server-sa
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: fl-server
+          image: "{{ .Values.global.dockerUsername }}/fl-server:{{ .Values.global.imageTag }}"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ .Values.server.port }}
+          env:
+            - name: MIN_NODES
+              value: "{{ .Values.server.fl.minNodes }}"
+            - name: MAX_ROUNDS
+              value: "{{ .Values.server.fl.maxRounds }}"
+            - name: QUORUM_PCT
+              value: "{{ .Values.server.fl.quorumPct }}"
+            - name: ROLLBACK_THRESHOLD
+              value: "{{ .Values.server.fl.rollbackThreshold }}"
+            - name: ROUND_TIMEOUT
+              value: "{{ .Values.server.fl.roundTimeout }}"
+            - name: DP_EPSILON
+              value: "{{ .Values.server.dp.epsilon }}"
+            - name: DP_DELTA
+              value: "{{ .Values.server.dp.delta }}"
+            - name: DP_CLIP_NORM
+              value: "{{ .Values.server.dp.clipNorm }}"
+            - name: INPUT_DIM
+              value: "{{ .Values.server.model.inputDim }}"
+            - name: S3_BUCKET
+              value: "{{ .Values.aws.s3Bucket }}"
+            - name: DYNAMODB_TABLE
+              value: "{{ .Values.aws.dynamodbTable }}"
+            - name: AWS_REGION
+              value: "{{ .Values.global.awsRegion }}"
+            - name: USE_LOCAL_STORAGE
+              value: "{{ .Values.aws.useLocalStorage }}"
+          envFrom:
+            - secretRef:
+                name: fl-secrets
+          resources:
+            requests:
+              cpu:    {{ .Values.server.resources.requests.cpu }}
+              memory: {{ .Values.server.resources.requests.memory }}
+            limits:
+              cpu:    {{ .Values.server.resources.limits.cpu }}
+              memory: {{ .Values.server.resources.limits.memory }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.server.port }}
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.server.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: local-storage
+              mountPath: /tmp/fl-storage
+      volumes:
+        - name: local-storage
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fl-server-service
+  namespace: {{ .Values.global.namespace }}
+spec:
+  selector:
+    app: fl-server
+  ports:
+    - port: {{ .Values.server.port }}
+      targetPort: {{ .Values.server.port }}
+  type: ClusterIP
+---
+{{- if .Values.server.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: fl-server-hpa
+  namespace: {{ .Values.global.namespace }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: fl-server
+  minReplicas: {{ .Values.server.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.server.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.server.autoscaling.cpuTarget }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.server.autoscaling.memTarget }}
+{{- end }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fl-server-sa
+  namespace: {{ .Values.global.namespace }}
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::{{ .Values.global.awsAccountId }}:role/fl-server-role"

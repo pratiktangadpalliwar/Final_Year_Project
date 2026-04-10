@@ -1,0 +1,33 @@
+---
+# ── Ingress for FL Server (admin + monitoring access) ─────────────
+# Requires AWS Load Balancer Controller installed on EKS.
+#
+# Install: https://docs.aws.amazon.com/eks/latest/userguide/aws-load-balancer-controller.html
+#
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fl-server-ingress
+  namespace: federated-learning
+  annotations:
+    kubernetes.io/ingress.class:                    alb
+    alb.ingress.kubernetes.io/scheme:               internet-facing
+    alb.ingress.kubernetes.io/target-type:          ip
+    alb.ingress.kubernetes.io/healthcheck-path:     /health
+    alb.ingress.kubernetes.io/listen-ports:         '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/certificate-arn:      "REPLACE_WITH_ACM_CERT_ARN"
+    alb.ingress.kubernetes.io/ssl-redirect:         "443"
+    # Restrict to your IP for admin access
+    alb.ingress.kubernetes.io/inbound-cidrs:        "0.0.0.0/0"
+spec:
+  rules:
+    - host: fl-server.YOUR_DOMAIN.com         # Replace with your domain
+      http:
+        paths:
+          - path:     /
+            pathType: Prefix
+            backend:
+              service:
+                name: fl-server-service
+                port:
+                  number: 8080

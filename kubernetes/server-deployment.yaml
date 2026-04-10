@@ -1,0 +1,152 @@
+---
+# ── FL Aggregation Server Deployment ──────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fl-server
+  namespace: federated-learning
+  labels:
+    app: fl-server
+    component: aggregator
+spec:
+  replicas: 2                         # HA — 2 replicas always running
+  selector:
+    matchLabels:
+      app: fl-server
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge:       1
+      maxUnavailable: 0               # zero-downtime rolling update
+  template:
+    metadata:
+      labels:
+        app: fl-server
+        component: aggregator
+    spec:
+      # Spread replicas across AZs
+      topologySpreadConstraints:
+        - maxSkew:           1
+          topologyKey:       topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: fl-server
+
+      # Anti-affinity — never co-locate both replicas on same node
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values: [fl-server]
+              topologyKey: kubernetes.io/hostname
+
+      serviceAccountName: fl-server-sa
+      terminationGracePeriodSeconds: 60
+
+      containers:
+        - name: fl-server
+          image: YOUR_DOCKERHUB_USERNAME/fl-server:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+
+          envFrom:
+            - configMapRef:
+                name: fl-config
+            - secretRef:
+                name: fl-secrets
+
+          resources:
+            requests:
+              cpu:    "500m"
+              memory: "512Mi"
+            limits:
+              cpu:    "2000m"
+              memory: "2Gi"
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds:       15
+            failureThreshold:    3
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds:       10
+            failureThreshold:    3
+
+          volumeMounts:
+            - name: local-storage
+              mountPath: /tmp/fl-storage
+
+      volumes:
+        - name: local-storage
+          emptyDir: {}
+
+---
+# ── FL Server Service (ClusterIP — internal only) ──────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: fl-server-service
+  namespace: federated-learning
+  labels:
+    app: fl-server
+spec:
+  selector:
+    app: fl-server
+  ports:
+    - port:       8080
+      targetPort: 8080
+      protocol:   TCP
+      name:       http
+  type: ClusterIP
+
+---
+# ── Horizontal Pod Autoscaler ──────────────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: fl-server-hpa
+  namespace: federated-learning
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind:       Deployment
+    name:       fl-server
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type:               Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type:               Utilization
+          averageUtilization: 80
+
+---
+# ── ServiceAccount for FL Server (AWS IAM binding) ────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fl-server-sa
+  namespace: federated-learning
+  annotations:
+    # Replace with your actual IAM role ARN after terraform apply
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/fl-server-role

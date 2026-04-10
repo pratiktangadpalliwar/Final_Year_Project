@@ -1,0 +1,16 @@
+apiVersion: v2
+name: fl-project
+description: >
+  Resilient Federated Learning Architecture for Privacy-Preserving
+  Financial Fraud Detection on Kubernetes and AWS.
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - federated-learning
+  - privacy
+  - fraud-detection
+  - kubernetes
+  - aws
+maintainers:
+  - name: FL Project Team

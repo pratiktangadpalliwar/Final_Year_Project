@@ -1,0 +1,253 @@
+###############################################################################
+# docker-compose.yml
+# Full local FL system — no AWS needed.
+# Uses local filesystem instead of S3/DynamoDB.
+#
+# Usage:
+#   docker-compose up --build          # start everything
+#   docker-compose up fl-server        # start server only
+#   docker-compose logs -f fl-bank-01  # tail bank logs
+#
+# To trigger training on a bank:
+#   cp data/bank_01_retail_urban.csv ./bank-data/bank-01/input/
+#
+###############################################################################
+
+version: "3.9"
+
+networks:
+  fl-network:
+    driver: bridge
+
+volumes:
+  fl-storage:        # shared local storage (replaces S3)
+  bank01-input:
+  bank02-input:
+  bank03-input:
+  bank04-input:
+  bank05-input:
+  bank06-input:
+  bank07-input:
+
+services:
+
+  # ── FL Aggregation Server ────────────────────────────────────────
+  fl-server:
+    build:
+      context:    ./server
+      dockerfile: Dockerfile
+    container_name: fl-server
+    networks:   [fl-network]
+    ports:
+      - "8080:8080"
+    environment:
+      PORT:               "8080"
+      MIN_NODES:          "3"
+      MAX_ROUNDS:         "50"
+      QUORUM_PCT:         "0.6"
+      ROLLBACK_THRESHOLD: "0.05"
+      ROUND_TIMEOUT:      "300"
+      DP_EPSILON:         "5.0"
+      DP_DELTA:           "1e-5"
+      DP_CLIP_NORM:       "0.5"
+      INPUT_DIM:          "19"
+      USE_LOCAL_STORAGE:  "true"
+      LOCAL_STORAGE_DIR:  "/fl-storage"
+      DYNAMODB_TABLE:     "fl-rounds"
+      S3_BUCKET:          "fl-models"
+      AWS_REGION:         "us-east-1"
+    volumes:
+      - fl-storage:/fl-storage
+    healthcheck:
+      test:     ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 15s
+      timeout:  10s
+      retries:  5
+    restart: unless-stopped
+
+  # ── Bank 01 — MetroRetail (fault: node_crash) ────────────────────
+  fl-bank-01:
+    build:
+      context:    ./client
+      dockerfile: Dockerfile
+    container_name: fl-bank-01
+    networks:   [fl-network]
+    depends_on:
+      fl-server:
+        condition: service_healthy
+    environment:
+      BANK_ID:              "bank_01_retail_urban"
+      BANK_NAME:            "MetroRetail Bank"
+      FL_SERVER_URL:        "http://fl-server:8080"
+      USE_LOCAL_STORAGE:    "true"
+      LOCAL_STORAGE_DIR:    "/tmp/fl-client"
+      S3_BUCKET:            "fl-models"
+      AWS_REGION:           "us-east-1"
+      DP_EPSILON:           "5.0"
+      DP_DELTA:             "1e-5"
+      DP_CLIP_NORM:         "0.5"
+      LOCAL_EPOCHS:         "10"
+      BATCH_SIZE:           "512"
+      LEARNING_RATE:        "0.001"
+      INPUT_DIM:            "19"
+      POLL_INTERVAL_SECONDS:"10"
+    volumes:
+      - bank01-input:/data/input
+      - fl-storage:/tmp/fl-shared
+    restart: unless-stopped
+
+  # ── Bank 02 — CorpFinance (fault: straggler) ─────────────────────
+  fl-bank-02:
+    build:
+      context:    ./client
+      dockerfile: Dockerfile
+    container_name: fl-bank-02
+    networks:   [fl-network]
+    depends_on:
+      fl-server:
+        condition: service_healthy
+    environment:
+      BANK_ID:              "bank_02_corporate"
+      BANK_NAME:            "CorpFinance Bank"
+      FL_SERVER_URL:        "http://fl-server:8080"
+      USE_LOCAL_STORAGE:    "true"
+      LOCAL_STORAGE_DIR:    "/tmp/fl-client"
+      S3_BUCKET:            "fl-models"
+      AWS_REGION:           "us-east-1"
+      DP_EPSILON:           "5.0"
+      DP_DELTA:             "1e-5"
+      DP_CLIP_NORM:         "0.5"
+      LOCAL_EPOCHS:         "10"
+      BATCH_SIZE:           "512"
+      LEARNING_RATE:        "0.001"
+      INPUT_DIM:            "19"
+      POLL_INTERVAL_SECONDS:"10"
+    volumes:
+      - bank02-input:/data/input
+      - fl-storage:/tmp/fl-shared
+    restart: unless-stopped
+
+  # ── Bank 03 — Heartland (fault: network_partition) ───────────────
+  fl-bank-03:
+    build:
+      context:    ./client
+      dockerfile: Dockerfile
+    container_name: fl-bank-03
+    networks:   [fl-network]
+    depends_on:
+      fl-server:
+        condition: service_healthy
+    environment:
+      BANK_ID:              "bank_03_regional_rural"
+      BANK_NAME:            "Heartland Community Bank"
+      FL_SERVER_URL:        "http://fl-server:8080"
+      USE_LOCAL_STORAGE:    "true"
+      LOCAL_STORAGE_DIR:    "/tmp/fl-client"
+      S3_BUCKET:            "fl-models"
+      LOCAL_EPOCHS:         "10"
+      BATCH_SIZE:           "512"
+      POLL_INTERVAL_SECONDS:"10"
+    volumes:
+      - bank03-input:/data/input
+      - fl-storage:/tmp/fl-shared
+    restart: unless-stopped
+
+  # ── Bank 04 — NeoVault (fault: byzantine) ────────────────────────
+  fl-bank-04:
+    build:
+      context:    ./client
+      dockerfile: Dockerfile
+    container_name: fl-bank-04
+    networks:   [fl-network]
+    depends_on:
+      fl-server:
+        condition: service_healthy
+    environment:
+      BANK_ID:              "bank_04_neobank_digital"
+      BANK_NAME:            "NeoVault Digital Bank"
+      FL_SERVER_URL:        "http://fl-server:8080"
+      USE_LOCAL_STORAGE:    "true"
+      LOCAL_STORAGE_DIR:    "/tmp/fl-client"
+      S3_BUCKET:            "fl-models"
+      LOCAL_EPOCHS:         "10"
+      BATCH_SIZE:           "512"
+      POLL_INTERVAL_SECONDS:"10"
+    volumes:
+      - bank04-input:/data/input
+      - fl-storage:/tmp/fl-shared
+    restart: unless-stopped
+
+  # ── Bank 05 — GlobalTrade (fault: dropout_rejoin) ────────────────
+  fl-bank-05:
+    build:
+      context:    ./client
+      dockerfile: Dockerfile
+    container_name: fl-bank-05
+    networks:   [fl-network]
+    depends_on:
+      fl-server:
+        condition: service_healthy
+    environment:
+      BANK_ID:              "bank_05_international"
+      BANK_NAME:            "GlobalTrade Bank"
+      FL_SERVER_URL:        "http://fl-server:8080"
+      USE_LOCAL_STORAGE:    "true"
+      LOCAL_STORAGE_DIR:    "/tmp/fl-client"
+      S3_BUCKET:            "fl-models"
+      LOCAL_EPOCHS:         "10"
+      BATCH_SIZE:           "512"
+      POLL_INTERVAL_SECONDS:"10"
+    volumes:
+      - bank05-input:/data/input
+      - fl-storage:/tmp/fl-shared
+    restart: unless-stopped
+
+  # ── Bank 06 — SafeHarbor (stable baseline) ───────────────────────
+  fl-bank-06:
+    build:
+      context:    ./client
+      dockerfile: Dockerfile
+    container_name: fl-bank-06
+    networks:   [fl-network]
+    depends_on:
+      fl-server:
+        condition: service_healthy
+    environment:
+      BANK_ID:              "bank_06_credit_union"
+      BANK_NAME:            "SafeHarbor Credit Union"
+      FL_SERVER_URL:        "http://fl-server:8080"
+      USE_LOCAL_STORAGE:    "true"
+      LOCAL_STORAGE_DIR:    "/tmp/fl-client"
+      S3_BUCKET:            "fl-models"
+      LOCAL_EPOCHS:         "10"
+      BATCH_SIZE:           "512"
+      POLL_INTERVAL_SECONDS:"10"
+    volumes:
+      - bank06-input:/data/input
+      - fl-storage:/tmp/fl-shared
+    restart: unless-stopped
+
+  # ── Bank 07 — PinnacleWealth (stable baseline) ───────────────────
+  fl-bank-07:
+    build:
+      context:    ./client
+      dockerfile: Dockerfile
+    container_name: fl-bank-07
+    networks:   [fl-network]
+    depends_on:
+      fl-server:
+        condition: service_healthy
+    environment:
+      BANK_ID:              "bank_07_investment_premium"
+      BANK_NAME:            "PinnacleWealth Bank"
+      FL_SERVER_URL:        "http://fl-server:8080"
+      USE_LOCAL_STORAGE:    "true"
+      LOCAL_STORAGE_DIR:    "/tmp/fl-client"
+      S3_BUCKET:            "fl-models"
+      LOCAL_EPOCHS:         "10"
+      BATCH_SIZE:           "512"
+      POLL_INTERVAL_SECONDS:"10"
+    volumes:
+      - bank07-input:/data/input
+      - fl-storage:/tmp/fl-shared
+    restart: unless-stopped

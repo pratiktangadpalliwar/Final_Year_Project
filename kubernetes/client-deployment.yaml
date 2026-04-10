@@ -1,0 +1,155 @@
+---
+# ── Bank Node Client Deployment Template ──────────────────────────
+# This template is used for EACH bank node.
+# Deploy one per bank by changing BANK_ID / BANK_NAME env vars.
+#
+# To add a new bank node:
+#   cp client-deployment.yaml bank_08_deployment.yaml
+#   Edit: BANK_ID, BANK_NAME, deployment name, PVC name
+#   kubectl apply -f bank_08_deployment.yaml
+#
+# To remove a bank node:
+#   kubectl delete deployment fl-client-bank-01 -n federated-learning
+#
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fl-client-bank-01          # Change per bank
+  namespace: federated-learning
+  labels:
+    app: fl-client
+    bank: bank-01                  # Change per bank
+spec:
+  replicas: 1                      # One pod per bank
+  selector:
+    matchLabels:
+      app: fl-client
+      bank: bank-01                # Change per bank
+  strategy:
+    type: Recreate                 # One-at-a-time (training job)
+  template:
+    metadata:
+      labels:
+        app: fl-client
+        bank: bank-01              # Change per bank
+    spec:
+      serviceAccountName: fl-client-sa
+      terminationGracePeriodSeconds: 120    # let training finish
+
+      # Each bank runs on its own dedicated node (data isolation)
+      nodeSelector:
+        bank-node: "true"
+
+      containers:
+        - name: fl-client
+          image: YOUR_DOCKERHUB_USERNAME/fl-client:latest
+          imagePullPolicy: Always
+
+          env:
+            # ── Bank identity ──────────────────────────────────────
+            - name:  BANK_ID
+              value: "bank_01_retail_urban"       # Change per bank
+            - name:  BANK_NAME
+              value: "MetroRetail Bank"           # Change per bank
+
+            # ── FL Server endpoint ─────────────────────────────────
+            - name:  FL_SERVER_URL
+              value: "http://fl-server-service:8080"
+
+            # ── Data directories ───────────────────────────────────
+            - name:  INPUT_DIR
+              value: "/data/input"
+            - name:  DONE_DIR
+              value: "/data/processed"
+            - name:  ERROR_DIR
+              value: "/data/error"
+
+          envFrom:
+            - configMapRef:
+                name: fl-config
+            - secretRef:
+                name: fl-secrets
+
+          resources:
+            requests:
+              cpu:    "1000m"
+              memory: "2Gi"
+            limits:
+              cpu:    "4000m"
+              memory: "8Gi"
+
+          livenessProbe:
+            exec:
+              command: ["pgrep", "-f", "watcher.py"]
+            initialDelaySeconds: 10
+            periodSeconds:       30
+            failureThreshold:    3
+
+          volumeMounts:
+            # Input: bank drops CSV here
+            - name:      bank-data-input
+              mountPath: /data/input
+            # Processed: archived CSVs
+            - name:      bank-data-processed
+              mountPath: /data/processed
+            # Error: failed CSVs
+            - name:      bank-data-error
+              mountPath: /data/error
+            # Temp: model weights cache
+            - name:      tmp-storage
+              mountPath: /tmp/fl-client
+
+      volumes:
+        # Persistent input volume — bank mounts this to drop CSVs
+        - name: bank-data-input
+          persistentVolumeClaim:
+            claimName: fl-bank-01-input-pvc    # Change per bank
+
+        - name: bank-data-processed
+          persistentVolumeClaim:
+            claimName: fl-bank-01-done-pvc     # Change per bank
+
+        - name: bank-data-error
+          emptyDir: {}
+
+        - name: tmp-storage
+          emptyDir: {}
+
+---
+# ── PVC for bank input data (ReadWriteOnce — bank uploads here) ────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fl-bank-01-input-pvc       # Change per bank
+  namespace: federated-learning
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp2             # AWS EBS gp2
+  resources:
+    requests:
+      storage: 10Gi                 # 500K transactions ≈ ~100MB; 10Gi is safe
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fl-bank-01-done-pvc        # Change per bank
+  namespace: federated-learning
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp2
+  resources:
+    requests:
+      storage: 20Gi                 # archive storage
+
+---
+# ── ServiceAccount for bank nodes ─────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fl-client-sa
+  namespace: federated-learning
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/fl-client-role
