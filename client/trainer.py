@@ -6,6 +6,7 @@ Handles class imbalance, DP noise injection, and metric reporting.
 """
 
 import os
+import time
 import logging
 import numpy as np
 from typing import Optional, Tuple, List
@@ -67,6 +68,7 @@ class LocalTrainer:
         Perform local training and return (weights, metrics).
         """
         try:
+            _train_start = time.time()
             # ── Build model ───────────────────────────────────────
             model = FraudDetectionModel(
                 input_dim   = X_train.shape[1],
@@ -123,13 +125,15 @@ class LocalTrainer:
                 best_weights = self._apply_dp(best_weights)
 
             metrics = {
-                "loss"     : float(best_val_loss),
-                "auc"      : float(val_metrics.get("auc",       0)),
-                "f1"       : float(val_metrics.get("f1",        0)),
-                "precision": float(val_metrics.get("precision", 0)),
-                "recall"   : float(val_metrics.get("recall",    0)),
-                "epochs"   : EPOCHS,
-                "n_samples": self.n_samples,
+                "loss"           : float(best_val_loss),
+                "accuracy"       : float(val_metrics.get("accuracy",  0)),
+                "auc"            : float(val_metrics.get("auc",       0)),
+                "f1"             : float(val_metrics.get("f1",        0)),
+                "precision"      : float(val_metrics.get("precision", 0)),
+                "recall"         : float(val_metrics.get("recall",    0)),
+                "training_time_s": round(time.time() - _train_start, 2),
+                "epochs"         : EPOCHS,
+                "n_samples"      : self.n_samples,
             }
 
             return best_weights, metrics
@@ -184,6 +188,7 @@ class LocalTrainer:
 
         metrics = {}
         try:
+            metrics["accuracy"] = float((preds == all_labels.astype(int)).mean())
             if len(np.unique(all_labels)) > 1:
                 metrics["auc"]       = float(roc_auc_score(all_labels, all_probs))
                 metrics["f1"]        = float(f1_score(all_labels, preds, zero_division=0))

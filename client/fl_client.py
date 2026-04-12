@@ -173,15 +173,21 @@ class FLClient:
             weights_url   = data.get("weights_url", "")
 
             if weights_url.startswith("local://"):
-                # Local storage mode
-                path = Path(weights_url.replace("local://", ""))
-                weights = torch.load(path, map_location="cpu")
+                # Local storage mode — validate path stays within allowed root
+                raw  = weights_url[len("local://"):]
+                path = Path(raw).resolve()
+                storage_root = Path(os.environ.get(
+                    "LOCAL_STORAGE_DIR", "/tmp/fl-storage")).resolve()
+                if not str(path).startswith(str(storage_root)):
+                    logger.error(f"Path traversal blocked: {raw}")
+                    return None
+                weights = torch.load(path, map_location="cpu", weights_only=True)
             else:
                 # Download from presigned S3 URL
                 model_resp = requests.get(weights_url, timeout=120)
                 model_resp.raise_for_status()
                 buf     = io.BytesIO(model_resp.content)
-                weights = torch.load(buf, map_location="cpu")
+                weights = torch.load(buf, map_location="cpu", weights_only=True)
 
             logger.info(f"Downloaded global model (round {self.current_round})")
             return weights

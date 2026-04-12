@@ -68,13 +68,13 @@ class S3Storage:
             path = self.local_dir / key
             if not path.exists():
                 return None
-            return torch.load(path, map_location="cpu")
+            return torch.load(path, map_location="cpu", weights_only=True)
 
         try:
             buf = io.BytesIO()
             self.s3.download_fileobj(self.bucket, key, buf)
             buf.seek(0)
-            return torch.load(buf, map_location="cpu")
+            return torch.load(buf, map_location="cpu", weights_only=True)
         except Exception as e:
             logger.error(f"S3 download failed ({key}): {e}")
             return None

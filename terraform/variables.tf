@@ -47,13 +47,13 @@ variable "public_subnets" {
 variable "server_instance_type" {
   description = "EC2 instance type for FL server nodes"
   type        = string
-  default     = "t3.large"
+  default     = "t3.medium"
 }
 
 variable "bank_instance_type" {
   description = "EC2 instance type for bank nodes (needs more RAM for PyTorch)"
   type        = string
-  default     = "t3.xlarge"
+  default     = "t3.small"
 }
 
 variable "num_banks" {

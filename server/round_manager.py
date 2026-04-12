@@ -66,6 +66,15 @@ class RoundManager:
         self._timeout_thread: Optional[threading.Thread] = None
         self._round_start_time: Optional[datetime] = None
 
+        # Callback wired by app.py to avoid circular import
+        self._aggregation_callback = None
+        # Byzantine tracking for rounds-to-recovery metric
+        self._byzantine_start_round: Optional[int] = None
+
+    def set_aggregation_callback(self, fn):
+        """Register aggregation trigger — avoids circular import with app.py."""
+        self._aggregation_callback = fn
+
     # ══════════════════════════════════════════════════════════════
     # INITIALISATION
     # ══════════════════════════════════════════════════════════════
@@ -278,14 +287,65 @@ class RoundManager:
             for bank_id in self.pending_updates:
                 self.reward_node(bank_id)
 
-            # Record metrics
+            # ── Aggregate client metrics for thesis ───────────────
+            updates_list = list(self.pending_updates.values())
+            client_mets  = [u.get("metrics", {}) for u in updates_list]
+
+            _m: dict = {}
+            for _key in ["loss", "accuracy", "auc", "f1", "precision", "recall"]:
+                vals = [float(m[_key]) for m in client_mets
+                        if _key in m and isinstance(m.get(_key), (int, float))]
+                if vals:
+                    _m[f"avg_{_key}"] = round(float(np.mean(vals)), 4)
+
+            _t = [float(m["training_time_s"]) for m in client_mets
+                  if m.get("training_time_s", 0) > 0]
+            if _t:
+                _m["avg_training_time_s"]   = round(float(np.mean(_t)), 2)
+                _m["total_training_time_s"] = round(float(np.sum(_t)),  2)
+
+            if new_weights:
+                _np = sum(int(t.numel()) for t in new_weights)
+                _m["model_params"]        = _np
+                _m["comm_overhead_bytes"] = _np * 4 * len(updates_list)
+                _m["comm_overhead_mb"]    = round(_m["comm_overhead_bytes"] / 1e6, 3)
+
+            _n_rej  = len(agg_info.get("rejected", []))
+            _n_tot  = len(updates_list) + _n_rej
+            _m["n_rejected"]               = _n_rej
+            _m["n_participated"]           = len(updates_list)
+            _m["byzantine_detection_rate"] = round(_n_rej / max(_n_tot, 1), 4)
+            _m["aggregation_method"]       = agg_info.get("method", "fedavg")
+            _m["suspicious_ratio"]         = agg_info.get("suspicious_ratio", 0.0)
+
+            _method = agg_info.get("method", "fedavg")
+            if _method in ("krum", "trimmed_mean", "median"):
+                if self._byzantine_start_round is None:
+                    self._byzantine_start_round = old_round
+                _m["in_byzantine_mode"] = True
+            else:
+                if self._byzantine_start_round is not None:
+                    _m["rounds_to_recovery"]    = old_round - self._byzantine_start_round
+                    self._byzantine_start_round = None
+                _m["in_byzantine_mode"] = False
+
+            if self.metrics_history:
+                _prev = self.metrics_history[-1].get("metrics", {})
+                _pl   = _prev.get("avg_loss")
+                _cl   = _m.get("avg_loss")
+                if _pl is not None and _cl is not None:
+                    _m["loss_delta"]       = round(float(_pl) - float(_cl), 4)
+                    _m["convergence_rate"] = round(
+                        _m["loss_delta"] / max(float(_pl), 1e-8), 4)
+
+            # Record round metrics
             self.metrics_history.append({
-                "round"           : old_round,
-                "nodes_participated": len(self.pending_updates),
-                "nodes_total"     : self.active_nodes,
-                "rejected_nodes"  : agg_info.get("rejected", []),
-                "aggregation_method": agg_info.get("method", "fedavg"),
-                "timestamp"       : datetime.utcnow().isoformat(),
+                "round"             : old_round,
+                "nodes_participated": len(updates_list),
+                "nodes_total"       : self.active_nodes,
+                "rejected_nodes"    : agg_info.get("rejected", []),
+                "metrics"           : _m,
+                "timestamp"         : datetime.utcnow().isoformat(),
             })
 
             # Clear updates for next round
@@ -377,8 +437,8 @@ class RoundManager:
                             self.registered_nodes[node].get("rounds_skipped", 0) + 1
                         logger.warning(f"Straggler: {node} missed round {self.current_round}")
 
-                from app import _run_aggregation
-                _run_aggregation()
+                if self._aggregation_callback:
+                    self._aggregation_callback()
             else:
                 logger.warning(f"Round timeout — only {n_updates} updates, "
                                f"need {self.min_nodes_per_round} — waiting")
@@ -399,8 +459,11 @@ class RoundManager:
             "quorum_reached"   : self.quorum_reached(),
             "trust_scores"     : self.trust_scores,
             "max_rounds"       : self.max_rounds,
-            "round_elapsed_s"  : (
+            "round_elapsed_s"   : (
                 (datetime.utcnow() - self._round_start_time).seconds
                 if self._round_start_time else 0
+            ),
+            "last_round_metrics": (
+                self.metrics_history[-1] if self.metrics_history else {}
             ),
         }

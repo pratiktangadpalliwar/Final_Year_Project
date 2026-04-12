@@ -13,11 +13,14 @@ Endpoints:
   POST /admin/rollback    - Manual rollback trigger
 """
 
+import io
 import os
+import re
 import json
 import logging
 import threading
 from datetime import datetime
+from pathlib import Path
 from flask import Flask, request, jsonify
 
 from round_manager import RoundManager
@@ -28,6 +31,34 @@ from utils        import setup_logging, validate_update
 
 app    = Flask(__name__)
 logger = setup_logging("fl-server")
+
+ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
+
+# ── CORS (required for browser-based dashboard) ───────────────────
+@app.after_request
+def _add_cors(response):
+    origin = os.environ.get("CORS_ORIGIN", "*")
+    response.headers["Access-Control-Allow-Origin"]  = origin
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Admin-Token"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    return response
+
+@app.route("/", defaults={"path": ""}, methods=["OPTIONS"])
+@app.route("/<path:path>", methods=["OPTIONS"])
+def _options_handler(path):
+    return jsonify({}), 200
+
+
+def _sanitize_key(key):
+    """Return key if safe for S3/local storage, else None."""
+    if not isinstance(key, str) or not key:
+        return None
+    if ".." in key or key.startswith("/"):
+        return None
+    if not re.match(r'^[a-zA-Z0-9/_\-\.]+$', key):
+        return None
+    return key
+
 
 # ── Globals (initialised in main) ─────────────────────────────────
 round_manager : RoundManager   = None
@@ -115,6 +146,10 @@ def submit_update():
     # ── Validation ────────────────────────────────────────────────
     if not all([bank_id, round_num is not None, weights_key]):
         return jsonify({"error": "bank_id, round, weights_key required"}), 400
+
+    weights_key = _sanitize_key(weights_key)
+    if not weights_key:
+        return jsonify({"error": "invalid weights_key"}), 400
 
     if not round_manager.is_registered(bank_id):
         return jsonify({"error": "Node not registered"}), 403
@@ -209,6 +244,9 @@ def health():
 @app.route("/admin/rollback", methods=["POST"])
 def admin_rollback():
     """Manually trigger rollback to previous checkpoint."""
+    token = request.headers.get("X-Admin-Token", "")
+    if not ADMIN_TOKEN or token != ADMIN_TOKEN:
+        return jsonify({"error": "Unauthorized"}), 401
     data          = request.get_json() or {}
     target_round  = data.get("target_round")
 
@@ -217,6 +255,59 @@ def admin_rollback():
         logger.warning(f"Manual rollback triggered to round {target_round}")
         return jsonify({"rolled_back": True, "round": round_manager.current_round}), 200
     return jsonify({"error": "Rollback failed"}), 500
+
+
+# ══════════════════════════════════════════════════════════════════
+# CSV UPLOAD  (bank operator dashboard)
+# ══════════════════════════════════════════════════════════════════
+@app.route("/upload", methods=["POST"])
+def upload_csv():
+    """
+    Accept CSV from the bank operator UI.
+    Local mode  → saves to /data/<bank_id>/input/
+    S3 mode     → uploads to s3://<bucket>/uploads/<bank_id>/pending/
+    """
+    bank_id = (request.form.get("bank_id") or "").strip()
+    if not bank_id or not re.match(r'^[a-zA-Z0-9_\-]+$', bank_id):
+        return jsonify({"error": "valid bank_id required"}), 400
+
+    if "file" not in request.files:
+        return jsonify({"error": "file field required"}), 400
+
+    f = request.files["file"]
+    if not f or not f.filename:
+        return jsonify({"error": "no file selected"}), 400
+
+    # Basename only — strip any path component supplied by browser
+    safe_orig = re.sub(r'[^\w\-.]', '_', Path(f.filename).name)
+    if not safe_orig.lower().endswith(".csv"):
+        return jsonify({"error": "CSV file required"}), 400
+
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    safe_name = f"upload_{timestamp}_{safe_orig}"
+
+    use_local = os.environ.get("USE_LOCAL_STORAGE", "false").lower() == "true"
+
+    if use_local:
+        base      = Path(os.environ.get("INPUT_BASE_DIR", "/data"))
+        dest_dir  = base / bank_id / "input"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest_path = dest_dir / safe_name
+        f.save(str(dest_path))
+        logger.info(f"CSV uploaded for {bank_id} → {dest_path}")
+        return jsonify({"uploaded": True, "bank_id": bank_id,
+                        "filename": safe_name, "mode": "local"}), 200
+
+    try:
+        key = f"uploads/{bank_id}/pending/{safe_name}"
+        buf = io.BytesIO(f.read())
+        storage.s3.upload_fileobj(buf, storage.bucket, key)
+        logger.info(f"CSV uploaded to S3 for {bank_id}: {key}")
+        return jsonify({"uploaded": True, "bank_id": bank_id,
+                        "s3_key": key, "mode": "s3"}), 200
+    except Exception as e:
+        logger.error(f"S3 upload failed: {e}")
+        return jsonify({"error": "Upload failed"}), 500
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -297,6 +388,7 @@ def create_app():
     dp           = DifferentialPrivacy(cfg["dp_epsilon"], cfg["dp_delta"], cfg["dp_clip_norm"])
     aggregator   = FedAvgAggregator(dp=dp, cfg=cfg)
     round_manager= RoundManager(cfg=cfg, storage=storage, aggregator=aggregator)
+    round_manager.set_aggregation_callback(_run_aggregation)
 
     round_manager.initialise()
     logger.info(f"FL Server ready | Min nodes: {cfg['min_nodes']} | "

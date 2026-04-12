@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FL Fraud Detection — Bank Operator Dashboard</title>
+
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0A1628;
+      --surface:  #0D1F3C;
+      --surface2: #112240;
+      --border:   #1A3A5C;
+      --accent:   #00BCD4;
+      --accent2:  #0097A7;
+      --text:     #E8F4FD;
+      --muted:    #8BA7C0;
+      --success:  #4CAF50;
+      --warning:  #FF9800;
+      --danger:   #F44336;
+      --radius:   10px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 28px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    header .logo {
+      width: 36px; height: 36px;
+      background: var(--accent);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 800; color: var(--bg);
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 17px; font-weight: 600; letter-spacing: 0.3px; }
+    header .subtitle { font-size: 12px; color: var(--muted); }
+    header .conn-badge {
+      margin-left: auto;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      display: flex; align-items: center; gap: 6px;
+    }
+    header .conn-badge.ok  { background: rgba(76,175,80,.15); color: var(--success); border: 1px solid rgba(76,175,80,.3); }
+    header .conn-badge.err { background: rgba(244,67,54,.15);  color: var(--danger);  border: 1px solid rgba(244,67,54,.3);  }
+    header .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+    main {
+      padding: 24px 28px;
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      grid-template-rows: auto auto;
+      gap: 20px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+    .card-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 16px;
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    /* Upload panel */
+    .upload-panel { grid-row: 1 / 3; }
+
+    .bank-select {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 9px 12px;
+      font-size: 13px;
+      margin-bottom: 14px;
+      outline: none;
+      cursor: pointer;
+    }
+    .bank-select:focus { border-color: var(--accent); }
+    .bank-select option { background: var(--surface2); }
+
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      padding: 32px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all .2s;
+      background: var(--surface2);
+      margin-bottom: 14px;
+      min-height: 150px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+    .drop-zone.dragover { border-color: var(--accent); background: rgba(0,188,212,.06); }
+    .drop-zone.has-file { border-color: var(--success); border-style: solid; }
+    .drop-zone .icon { font-size: 32px; }
+    .drop-zone p { color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .drop-zone .filename { color: var(--text); font-weight: 600; word-break: break-all; }
+
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 11px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .15s;
+      text-align: center;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: var(--bg);
+    }
+    .btn-primary:hover:not(:disabled) { background: var(--accent2); }
+    .btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+
+    .alert {
+      margin-top: 12px;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .alert-success { background: rgba(76,175,80,.12);  color: #80e27e; border: 1px solid rgba(76,175,80,.3); }
+    .alert-error   { background: rgba(244,67,54,.12);  color: #ef9a9a; border: 1px solid rgba(244,67,54,.3); }
+    .alert-info    { background: rgba(0,188,212,.10);  color: var(--accent); border: 1px solid rgba(0,188,212,.25); }
+
+    /* Status panel */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .stat-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .stat-box .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 6px; }
+    .stat-box .value { font-size: 24px; font-weight: 700; color: var(--text); line-height: 1; }
+    .stat-box .unit  { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+    .quorum-bar {
+      background: var(--surface2);
+      border-radius: 6px;
+      height: 8px;
+      overflow: hidden;
+      margin-top: 6px;
+    }
+    .quorum-fill {
+      height: 100%;
+      border-radius: 6px;
+      background: var(--accent);
+      transition: width .4s ease;
+    }
+    .quorum-fill.reached { background: var(--success); }
+
+    /* Trust scores table */
+    .trust-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .trust-table th {
+      text-align: left; padding: 6px 10px;
+      color: var(--muted); font-weight: 600;
+      border-bottom: 1px solid var(--border);
+      font-size: 11px; text-transform: uppercase; letter-spacing: .5px;
+    }
+    .trust-table td { padding: 8px 10px; border-bottom: 1px solid rgba(26,58,92,.5); }
+    .trust-table tr:last-child td { border-bottom: none; }
+    .trust-bar-wrap { display: flex; align-items: center; gap: 8px; }
+    .trust-bar-bg   { flex: 1; height: 5px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+    .trust-bar-fill { height: 100%; border-radius: 3px; transition: width .4s; }
+    .badge {
+      display: inline-block; padding: 2px 8px;
+      border-radius: 10px; font-size: 11px; font-weight: 600;
+    }
+    .badge-ok       { background: rgba(76,175,80,.15);  color: #80e27e; }
+    .badge-warn     { background: rgba(255,152,0,.15);   color: #ffcc02; }
+    .badge-danger   { background: rgba(244,67,54,.15);   color: #ef9a9a; }
+    .badge-suspended{ background: rgba(244,67,54,.25);   color: #f44336; }
+
+    /* Metrics chart */
+    .chart-panel { grid-column: 2 / 3; }
+    .chart-wrap  { position: relative; height: 260px; }
+
+    .metrics-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .mini-stat {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      text-align: center;
+    }
+    .mini-stat .label { font-size: 10px; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+    .mini-stat .value { font-size: 18px; font-weight: 700; color: var(--accent); }
+
+    /* Spinner */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(0,188,212,.25);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      display: inline-block;
+      animation: spin .7s linear infinite;
+    }
+
+    .agg-badge {
+      display: inline-block; padding: 3px 10px;
+      border-radius: 4px; font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .5px;
+    }
+    .agg-fedavg    { background: rgba(0,188,212,.15); color: var(--accent); }
+    .agg-krum      { background: rgba(244,67,54,.15); color: #ef9a9a; }
+    .agg-trimmed   { background: rgba(255,152,0,.15); color: #ffcc02; }
+    .agg-median    { background: rgba(156,39,176,.15); color: #ce93d8; }
+
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; }
+      .upload-panel { grid-row: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    // ── Config ──────────────────────────────────────────────────────
+    const API_BASE    = window.FL_SERVER_URL || '';
+    const POLL_MS     = 5000;
+    const BANK_OPTIONS = [
+      { id: 'bank_01_retail_urban',     label: 'MetroRetail Bank'          },
+      { id: 'bank_02_corporate',        label: 'CorpFinance Bank'          },
+      { id: 'bank_03_regional_rural',   label: 'Heartland Community Bank'  },
+      { id: 'bank_04_neobank_digital',  label: 'NeoVault Digital Bank'     },
+      { id: 'bank_05_international',    label: 'GlobalTrade Bank'          },
+      { id: 'bank_06_credit_union',     label: 'SafeHarbor Credit Union'   },
+      { id: 'bank_07_investment_premium', label: 'PinnacleWealth Bank'    },
+    ];
+
+    // ── Helpers ─────────────────────────────────────────────────────
+    const fmt = (v, d = 3) => (typeof v === 'number' ? v.toFixed(d) : '—');
+    const pct = v           => (typeof v === 'number' ? (v * 100).toFixed(1) + '%' : '—');
+
+    function trustColor(t) {
+      if (t >= 0.7) return '#4CAF50';
+      if (t >= 0.4) return '#FF9800';
+      return '#F44336';
+    }
+
+    function aggBadge(method) {
+      const cls = {
+        fedavg: 'agg-fedavg', krum: 'agg-krum',
+        trimmed_mean: 'agg-trimmed', median: 'agg-median',
+      }[method] || 'agg-fedavg';
+      return <span className={`agg-badge ${cls}`}>{method || 'fedavg'}</span>;
+    }
+
+    // ── MetricsChart ────────────────────────────────────────────────
+    function MetricsChart({ history }) {
+      const canvasRef = useRef(null);
+      const chartRef  = useRef(null);
+
+      useEffect(() => {
+        if (!canvasRef.current) return;
+        const labels = history.map(h => `R${h.round}`);
+        const get    = (h, k) => h.metrics?.[k] ?? null;
+
+        const datasets = [
+          { label: 'Avg Loss',     data: history.map(h => get(h, 'avg_loss')),
+            borderColor: '#F44336', backgroundColor: 'rgba(244,67,54,.1)',  tension: .3, fill: true },
+          { label: 'Avg F1',       data: history.map(h => get(h, 'avg_f1')),
+            borderColor: '#00BCD4', backgroundColor: 'rgba(0,188,212,.1)',  tension: .3, fill: false },
+          { label: 'Avg AUC-ROC',  data: history.map(h => get(h, 'avg_auc')),
+            borderColor: '#4CAF50', backgroundColor: 'rgba(76,175,80,.1)',  tension: .3, fill: false },
+          { label: 'Avg Accuracy', data: history.map(h => get(h, 'avg_accuracy')),
+            borderColor: '#FF9800', backgroundColor: 'rgba(255,152,0,.1)', tension: .3, fill: false },
+        ];
+
+        if (chartRef.current) {
+          chartRef.current.data.labels   = labels;
+          chartRef.current.data.datasets.forEach((ds, i) => { ds.data = datasets[i].data; });
+          chartRef.current.update('none');
+          return;
+        }
+
+        chartRef.current = new Chart(canvasRef.current, {
+          type: 'line',
+          data: { labels, datasets },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            animation: { duration: 300 },
+            plugins: {
+              legend: { labels: { color: '#8BA7C0', font: { size: 11 }, boxWidth: 12 } },
+              tooltip: { backgroundColor: '#0D1F3C', borderColor: '#1A3A5C', borderWidth: 1,
+                         titleColor: '#E8F4FD', bodyColor: '#8BA7C0' },
+            },
+            scales: {
+              x: { ticks: { color: '#8BA7C0', font: { size: 11 } },
+                   grid:  { color: 'rgba(26,58,92,.5)' } },
+              y: { ticks: { color: '#8BA7C0', font: { size: 11 } },
+                   grid:  { color: 'rgba(26,58,92,.5)' }, min: 0 },
+            },
+          },
+        });
+
+        return () => {
+          if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
+        };
+      }, [history]);
+
+      if (!history.length) {
+        return (
+          <div style={{ height: 260, display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', color: 'var(--muted)' }}>
+            No round data yet — waiting for first aggregation
+          </div>
+        );
+      }
+      return <div className="chart-wrap"><canvas ref={canvasRef} /></div>;
+    }
+
+    // ── TrustTable ──────────────────────────────────────────────────
+    function TrustTable({ trustScores, suspended }) {
+      if (!trustScores || !Object.keys(trustScores).length) {
+        return <p style={{ color: 'var(--muted)', fontSize: 13 }}>No nodes registered yet.</p>;
+      }
+      const entries = Object.entries(trustScores).sort((a, b) => b[1] - a[1]);
+      return (
+        <table className="trust-table">
+          <thead>
+            <tr>
+              <th>Node</th>
+              <th>Trust</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map(([id, score]) => {
+              const isSusp = suspended?.includes(id);
+              const label  = BANK_OPTIONS.find(b => b.id === id)?.label || id;
+              const color  = trustColor(score);
+              return (
+                <tr key={id}>
+                  <td style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis',
+                               whiteSpace: 'nowrap', title: id }}>{label}</td>
+                  <td>
+                    <div className="trust-bar-wrap">
+                      <div className="trust-bar-bg">
+                        <div className="trust-bar-fill"
+                             style={{ width: `${(score * 100).toFixed(0)}%`, background: color }} />
+                      </div>
+                      <span style={{ color, fontWeight: 700, minWidth: 36, textAlign: 'right',
+                                     fontSize: 12 }}>{score.toFixed(2)}</span>
+                    </div>
+                  </td>
+                  <td>
+                    {isSusp
+                      ? <span className="badge badge-suspended">Suspended</span>
+                      : score >= 0.7
+                        ? <span className="badge badge-ok">Active</span>
+                        : score >= 0.4
+                          ? <span className="badge badge-warn">Flagged</span>
+                          : <span className="badge badge-danger">Low trust</span>
+                    }
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      );
+    }
+
+    // ── UploadPanel ─────────────────────────────────────────────────
+    function UploadPanel({ bankId, setBankId }) {
+      const [dragOver,  setDragOver]  = useState(false);
+      const [file,      setFile]      = useState(null);
+      const [uploading, setUploading] = useState(false);
+      const [result,    setResult]    = useState(null);
+      const inputRef = useRef(null);
+
+      const accept = useCallback(f => {
+        if (!f) return;
+        if (!f.name.toLowerCase().endsWith('.csv')) {
+          setResult({ error: 'Only CSV files accepted.' }); return;
+        }
+        setFile(f); setResult(null);
+      }, []);
+
+      const onDrop = useCallback(e => {
+        e.preventDefault(); setDragOver(false);
+        accept(e.dataTransfer.files[0]);
+      }, [accept]);
+
+      const handleUpload = async () => {
+        if (!file) return;
+        setUploading(true); setResult(null);
+        const fd = new FormData();
+        fd.append('file',    file);
+        fd.append('bank_id', bankId);
+        try {
+          const r    = await fetch(`${API_BASE}/upload`, { method: 'POST', body: fd });
+          const data = await r.json();
+          if (r.ok) { setResult({ ok: true, data }); setFile(null); }
+          else      { setResult({ error: data.error || 'Upload failed' }); }
+        } catch (err) {
+          setResult({ error: `Network error: ${err.message}` });
+        } finally {
+          setUploading(false);
+        }
+      };
+
+      return (
+        <div className="card upload-panel">
+          <div className="card-title">
+            <span>&#128196;</span> CSV Upload
+          </div>
+
+          <label style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6,
+                          display: 'block', textTransform: 'uppercase', letterSpacing: '.5px' }}>
+            Bank Node
+          </label>
+          <select className="bank-select" value={bankId}
+                  onChange={e => { setBankId(e.target.value); setResult(null); }}>
+            {BANK_OPTIONS.map(b => (
+              <option key={b.id} value={b.id}>{b.label}</option>
+            ))}
+          </select>
+
+          <div
+            className={`drop-zone ${dragOver ? 'dragover' : ''} ${file ? 'has-file' : ''}`}
+            onClick={() => inputRef.current?.click()}
+            onDragOver={e  => { e.preventDefault(); setDragOver(true);  }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={onDrop}
+          >
+            <input ref={inputRef} type="file" accept=".csv"
+                   style={{ display: 'none' }}
+                   onChange={e => accept(e.target.files[0])} />
+            {file ? (
+              <>
+                <span className="icon">&#9989;</span>
+                <span className="filename">{file.name}</span>
+                <span style={{ color: 'var(--muted)', fontSize: 12 }}>
+                  {(file.size / 1e6).toFixed(2)} MB — click to change
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="icon">&#128229;</span>
+                <p>Drag &amp; drop your CSV here<br />or <strong style={{ color: 'var(--accent)' }}>click to browse</strong></p>
+                <p style={{ fontSize: 11 }}>Required columns: transaction_amount, is_fraud</p>
+              </>
+            )}
+          </div>
+
+          <button className="btn btn-primary" disabled={!file || uploading}
+                  onClick={handleUpload}>
+            {uploading
+              ? <><span className="spinner" style={{ verticalAlign: 'middle', marginRight: 8 }} />Uploading…</>
+              : '&#9654; Trigger Training'}
+          </button>
+
+          {result?.ok && (
+            <div className="alert alert-success">
+              &#10003; Uploaded <strong>{result.data.filename || result.data.s3_key}</strong>
+              {' '}to <em>{result.data.mode}</em>.<br />
+              Bank watcher will detect and begin training automatically.
+            </div>
+          )}
+          {result?.error && (
+            <div className="alert alert-error">&#9888; {result.error}</div>
+          )}
+
+          <div className="alert alert-info" style={{ marginTop: 16 }}>
+            <strong>How it works:</strong> Drop a transaction CSV — the bank's watcher
+            detects it, registers with the FL server, trains locally, and submits
+            encrypted weight updates. No raw data ever leaves this node.
+          </div>
+        </div>
+      );
+    }
+
+    // ── StatusPanel ─────────────────────────────────────────────────
+    function StatusPanel({ status }) {
+      if (!status) return (
+        <div className="card" style={{ display: 'flex', alignItems: 'center',
+                                       justifyContent: 'center', minHeight: 180 }}>
+          <span className="spinner" /> &nbsp; Connecting to FL server…
+        </div>
+      );
+
+      const { current_round, model_version, active_nodes, updates_received,
+              quorum_required, quorum_reached, trust_scores, suspended_nodes,
+              round_elapsed_s, last_round_metrics } = status;
+
+      const quorumPct = quorum_required > 0
+        ? Math.min((updates_received / quorum_required) * 100, 100) : 0;
+      const lm = last_round_metrics?.metrics || {};
+
+      return (
+        <>
+          {/* Round stats */}
+          <div className="card">
+            <div className="card-title"><span>&#128200;</span> Round Status</div>
+            <div className="stat-grid">
+              <div className="stat-box">
+                <div className="label">Round</div>
+                <div className="value">{current_round}</div>
+                <div className="unit">{model_version}</div>
+              </div>
+              <div className="stat-box">
+                <div className="label">Active Nodes</div>
+                <div className="value">{active_nodes}</div>
+                <div className="unit">{suspended_nodes?.length || 0} suspended</div>
+              </div>
+              <div className="stat-box">
+                <div className="label">Updates</div>
+                <div className="value" style={{ color: quorum_reached ? 'var(--success)' : 'var(--text)' }}>
+                  {updates_received}
+                  <span style={{ fontSize: 14, color: 'var(--muted)' }}>/{quorum_required}</span>
+                </div>
+                <div className="unit">needed for quorum</div>
+              </div>
+              <div className="stat-box">
+                <div className="label">Elapsed</div>
+                <div className="value">{round_elapsed_s || 0}<span style={{ fontSize: 14 }}>s</span></div>
+                <div className="unit">this round</div>
+              </div>
+            </div>
+
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>
+              Quorum progress &nbsp;
+              {quorum_reached && <span style={{ color: 'var(--success)', fontWeight: 700 }}>REACHED &#10003;</span>}
+            </div>
+            <div className="quorum-bar">
+              <div className={`quorum-fill ${quorum_reached ? 'reached' : ''}`}
+                   style={{ width: `${quorumPct}%` }} />
+            </div>
+
+            {lm.aggregation_method && (
+              <div style={{ marginTop: 12, fontSize: 12, color: 'var(--muted)' }}>
+                Last round method: {aggBadge(lm.aggregation_method)}
+                {lm.byzantine_detection_rate > 0 && (
+                  <span style={{ marginLeft: 10, color: 'var(--warning)' }}>
+                    &#9888; Byzantine detection: {pct(lm.byzantine_detection_rate)}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Last round metrics */}
+          <div className="card chart-panel">
+            <div className="card-title"><span>&#128202;</span> Training Metrics</div>
+            {Object.keys(lm).length > 0 && (
+              <div className="metrics-row">
+                <div className="mini-stat">
+                  <div className="label">Avg Loss</div>
+                  <div className="value">{fmt(lm.avg_loss, 4)}</div>
+                </div>
+                <div className="mini-stat">
+                  <div className="label">Avg F1</div>
+                  <div className="value">{fmt(lm.avg_f1, 3)}</div>
+                </div>
+                <div className="mini-stat">
+                  <div className="label">Avg AUC</div>
+                  <div className="value">{fmt(lm.avg_auc, 3)}</div>
+                </div>
+                <div className="mini-stat">
+                  <div className="label">Accuracy</div>
+                  <div className="value">{pct(lm.avg_accuracy)}</div>
+                </div>
+              </div>
+            )}
+            <MetricsChartWrapper />
+          </div>
+
+          {/* Trust scores */}
+          <div className="card">
+            <div className="card-title"><span>&#128274;</span> Node Trust Scores</div>
+            <TrustTable trustScores={trust_scores} suspended={suspended_nodes} />
+          </div>
+        </>
+      );
+    }
+
+    // Wrapper that fetches its own metrics history
+    function MetricsChartWrapper() {
+      const [history, setHistory] = useState([]);
+      useEffect(() => {
+        const load = async () => {
+          try {
+            const r = await fetch(`${API_BASE}/metrics`);
+            if (r.ok) {
+              const data = await r.json();
+              setHistory(data.metrics_history || []);
+            }
+          } catch {}
+        };
+        load();
+        const id = setInterval(load, POLL_MS);
+        return () => clearInterval(id);
+      }, []);
+      return <MetricsChart history={history} />;
+    }
+
+    // ── App ─────────────────────────────────────────────────────────
+    function App() {
+      const [status,  setStatus]  = useState(null);
+      const [online,  setOnline]  = useState(null);
+      const [bankId,  setBankId]  = useState('bank_01_retail_urban');
+
+      useEffect(() => {
+        const poll = async () => {
+          try {
+            const r = await fetch(`${API_BASE}/round/status`);
+            if (r.ok) {
+              setStatus(await r.json());
+              setOnline(true);
+            } else {
+              setOnline(false);
+            }
+          } catch {
+            setOnline(false);
+          }
+        };
+        poll();
+        const id = setInterval(poll, POLL_MS);
+        return () => clearInterval(id);
+      }, []);
+
+      return (
+        <>
+          <header>
+            <div className="logo">FL</div>
+            <div>
+              <h1>Federated Learning — Bank Operator Dashboard</h1>
+              <div className="subtitle">Financial Fraud Detection · Byzantine-Resilient · 7-Node Consortium</div>
+            </div>
+            <div className={`conn-badge ${online === false ? 'err' : 'ok'}`}>
+              <span className="dot" />
+              {online === null ? 'Connecting…' : online ? 'Server Online' : 'Server Offline'}
+            </div>
+          </header>
+
+          <main>
+            <UploadPanel bankId={bankId} setBankId={setBankId} />
+            <StatusPanel status={status} />
+          </main>
+        </>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

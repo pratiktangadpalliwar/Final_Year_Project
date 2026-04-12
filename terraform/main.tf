@@ -22,11 +22,11 @@ terraform {
 
   # Remote state — replace with your S3 bucket + DynamoDB table for locking
   backend "s3" {
-    bucket         = "fl-terraform-state"
-    key            = "fl-project/terraform.tfstate"
-    region         = "us-east-1"
-    dynamodb_table = "fl-terraform-locks"
-    encrypt        = true
+    bucket       = "fl-terraform-state-851725412457"  # ← paste actual account ID
+    key          = "fl-project/terraform.tfstate"
+    region       = "us-east-1"
+    use_lockfile = true
+    encrypt      = true
   }
 }
 
@@ -83,7 +83,7 @@ module "eks" {
   version = "~> 20.0"
 
   cluster_name    = var.cluster_name
-  cluster_version = "1.29"
+  cluster_version = "1.30"
 
   vpc_id                         = module.vpc.vpc_id
   subnet_ids                     = module.vpc.private_subnets

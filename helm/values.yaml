@@ -9,10 +9,10 @@
 # ── Global ─────────────────────────────────────────────────────────
 global:
   namespace:     federated-learning
-  dockerUsername: YOUR_DOCKERHUB_USERNAME   # set before deploying
+  dockerUsername: pratiktangadpalliwar   # set before deploying
   imageTag:      latest
   awsRegion:     us-east-1
-  awsAccountId:  "123456789012"             # replace with yours
+  awsAccountId:  "851725412457"             # replace with yours
 
 # ── FL Server ──────────────────────────────────────────────────────
 server:
