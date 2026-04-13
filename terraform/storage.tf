@@ -6,10 +6,6 @@
 resource "aws_s3_bucket" "fl_models" {
   bucket        = var.s3_bucket_name
   force_destroy = true
-
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 resource "aws_s3_bucket_versioning" "fl_models" {

@@ -65,7 +65,7 @@ variable "num_banks" {
 variable "s3_bucket_name" {
   description = "S3 bucket name for FL model storage"
   type        = string
-  default     = "fl-models-prod"
+  default     = "fl-models-prod-851725412457"
 }
 
 variable "dynamodb_table_name" {

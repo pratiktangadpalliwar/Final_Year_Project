@@ -97,7 +97,7 @@ module "eks" {
     coredns                = { most_recent = true }
     kube-proxy             = { most_recent = true }
     vpc-cni                = { most_recent = true }
-    aws-ebs-csi-driver     = { most_recent = true }
+    # aws-ebs-csi-driver removed — FL project uses S3, not EBS PVs
   }
 
   # ── Node Groups ────────────────────────────────────────────────
