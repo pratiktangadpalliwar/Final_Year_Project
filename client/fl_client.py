@@ -56,11 +56,14 @@ class FLClient:
     # ══════════════════════════════════════════════════════════════
     # FULL PIPELINE
     # ══════════════════════════════════════════════════════════════
-    def run_training_pipeline(self, csv_path: Path) -> bool:
+    def run_training_pipeline(self, csv_path: Path):
         """
         Execute full FL training pipeline for a given CSV.
-        Returns True on success.
+        Returns (success: bool, last_error: Optional[str]).
+        `last_error` is the raw error message — caller classifies
+        transient vs permanent.
         """
+        self.last_error = None
         try:
             # ── 1. Preprocess data ────────────────────────────────
             logger.info("Step 1/5 — Preprocessing data...")
@@ -69,8 +72,9 @@ class FLClient:
                 preprocessor.prepare(csv_path)
 
             if X_train is None or n_samples == 0:
-                logger.error("Preprocessing failed")
-                return False
+                self.last_error = "Preprocessing failed"
+                logger.error(self.last_error)
+                return False, self.last_error
 
             self.n_samples = n_samples
             logger.info(f"  Samples: {n_samples:,} | "
@@ -79,7 +83,8 @@ class FLClient:
             # ── 2. Register with server ───────────────────────────
             logger.info("Step 2/5 — Registering with FL server...")
             if not self._register():
-                return False
+                self.last_error = self.last_error or "Register failed"
+                return False, self.last_error
 
             # ── 3. Download global model ──────────────────────────
             logger.info("Step 3/5 — Downloading global model...")
@@ -101,8 +106,9 @@ class FLClient:
             )
 
             if local_weights is None:
-                logger.error("Training failed")
-                return False
+                self.last_error = "Training failed"
+                logger.error(self.last_error)
+                return False, self.last_error
 
             logger.info(f"  Loss: {metrics['loss']:.4f} | "
                         f"AUC: {metrics.get('auc', 0):.4f} | "
@@ -112,14 +118,18 @@ class FLClient:
             logger.info("Step 5/5 — Uploading update to server...")
             weights_key = self._upload_update(local_weights)
             if not weights_key:
-                return False
+                self.last_error = self.last_error or "Upload failed"
+                return False, self.last_error
 
             success = self._submit_update(weights_key, metrics)
-            return success
+            if not success and not self.last_error:
+                self.last_error = "Submit update failed"
+            return success, self.last_error
 
         except Exception as e:
+            self.last_error = str(e)
             logger.error(f"Pipeline error: {e}", exc_info=True)
-            return False
+            return False, self.last_error
 
     # ══════════════════════════════════════════════════════════════
     # REST CALLS
@@ -204,9 +214,12 @@ class FLClient:
             if success:
                 logger.info(f"Weights uploaded: {key}")
                 return key
+            # storage.upload_weights logs exception message; surface it
+            self.last_error = getattr(self.storage, "last_error", "Upload failed")
             return None
         except Exception as e:
-            logger.error(f"Upload failed: {e}")
+            self.last_error = f"Upload failed: {e}"
+            logger.error(self.last_error)
             return None
 
     def _submit_update(self, weights_key: str, metrics: dict) -> bool:
