@@ -32,6 +32,11 @@ spec:
       terminationGracePeriodSeconds: 120
       nodeSelector:
         bank-node: "true"
+      tolerations:
+        - key: "bank-node"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
       containers:
         - name: fl-client
           image: "{{ $.Values.global.dockerUsername }}/fl-client:{{ $.Values.global.imageTag }}"
@@ -54,11 +59,9 @@ spec:
             - name:  INPUT_DIM
               value: "{{ $.Values.server.model.inputDim }}"
             - name:  S3_BUCKET
-              value: "{{ $.Values.aws.s3Bucket }}"
+              value: "{{ tpl $.Values.aws.s3Bucket $ }}"
             - name:  AWS_REGION
               value: "{{ $.Values.global.awsRegion }}"
-            - name:  USE_LOCAL_STORAGE
-              value: "{{ $.Values.aws.useLocalStorage }}"
             - name:  DP_EPSILON
               value: "{{ $.Values.server.dp.epsilon }}"
             - name:  DP_DELTA
@@ -92,39 +95,13 @@ spec:
               mountPath: /tmp/fl-client
       volumes:
         - name: bank-input
-          persistentVolumeClaim:
-            claimName: pvc-{{ $bankSlug }}-input
+          emptyDir: {}
         - name: bank-processed
-          persistentVolumeClaim:
-            claimName: pvc-{{ $bankSlug }}-done
+          emptyDir: {}
         - name: bank-error
           emptyDir: {}
         - name: tmp-storage
           emptyDir: {}
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: pvc-{{ $bankSlug }}-input
-  namespace: {{ $.Values.global.namespace }}
-spec:
-  accessModes:    [ReadWriteOnce]
-  storageClassName: {{ $.Values.storage.storageClass }}
-  resources:
-    requests:
-      storage: {{ $.Values.storage.inputPvcSize }}
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: pvc-{{ $bankSlug }}-done
-  namespace: {{ $.Values.global.namespace }}
-spec:
-  accessModes:    [ReadWriteOnce]
-  storageClassName: {{ $.Values.storage.storageClass }}
-  resources:
-    requests:
-      storage: {{ $.Values.storage.processedPvcSize }}
 {{- end }}
 ---
 apiVersion: v1

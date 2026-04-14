@@ -11,16 +11,17 @@ Endpoints:
   GET  /health            - Health check
   GET  /metrics           - Training metrics
   POST /admin/rollback    - Manual rollback trigger
+
+Datasets are loaded locally on each bank node via kubectl cp or volume mounts.
+No upload endpoint needed — data never leaves the bank node.
 """
 
-import io
 import os
 import re
 import json
 import logging
 import threading
 from datetime import datetime
-from pathlib import Path
 from flask import Flask, request, jsonify
 
 from round_manager import RoundManager
@@ -258,59 +259,6 @@ def admin_rollback():
 
 
 # ══════════════════════════════════════════════════════════════════
-# CSV UPLOAD  (bank operator dashboard)
-# ══════════════════════════════════════════════════════════════════
-@app.route("/upload", methods=["POST"])
-def upload_csv():
-    """
-    Accept CSV from the bank operator UI.
-    Local mode  → saves to /data/<bank_id>/input/
-    S3 mode     → uploads to s3://<bucket>/uploads/<bank_id>/pending/
-    """
-    bank_id = (request.form.get("bank_id") or "").strip()
-    if not bank_id or not re.match(r'^[a-zA-Z0-9_\-]+$', bank_id):
-        return jsonify({"error": "valid bank_id required"}), 400
-
-    if "file" not in request.files:
-        return jsonify({"error": "file field required"}), 400
-
-    f = request.files["file"]
-    if not f or not f.filename:
-        return jsonify({"error": "no file selected"}), 400
-
-    # Basename only — strip any path component supplied by browser
-    safe_orig = re.sub(r'[^\w\-.]', '_', Path(f.filename).name)
-    if not safe_orig.lower().endswith(".csv"):
-        return jsonify({"error": "CSV file required"}), 400
-
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    safe_name = f"upload_{timestamp}_{safe_orig}"
-
-    use_local = os.environ.get("USE_LOCAL_STORAGE", "false").lower() == "true"
-
-    if use_local:
-        base      = Path(os.environ.get("INPUT_BASE_DIR", "/data"))
-        dest_dir  = base / bank_id / "input"
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        dest_path = dest_dir / safe_name
-        f.save(str(dest_path))
-        logger.info(f"CSV uploaded for {bank_id} → {dest_path}")
-        return jsonify({"uploaded": True, "bank_id": bank_id,
-                        "filename": safe_name, "mode": "local"}), 200
-
-    try:
-        key = f"uploads/{bank_id}/pending/{safe_name}"
-        buf = io.BytesIO(f.read())
-        storage.s3.upload_fileobj(buf, storage.bucket, key)
-        logger.info(f"CSV uploaded to S3 for {bank_id}: {key}")
-        return jsonify({"uploaded": True, "bank_id": bank_id,
-                        "s3_key": key, "mode": "s3"}), 200
-    except Exception as e:
-        logger.error(f"S3 upload failed: {e}")
-        return jsonify({"error": "Upload failed"}), 500
-
-
-# ══════════════════════════════════════════════════════════════════
 # AGGREGATION (background thread)
 # ══════════════════════════════════════════════════════════════════
 def _run_aggregation():
@@ -378,7 +326,6 @@ def create_app():
         "input_dim"        : int(os.environ.get("INPUT_DIM",      "19")),
         "hidden_dims"      : [64, 32, 16],
         "aws_region"       : os.environ.get("AWS_REGION",        "us-east-1"),
-        "use_local_storage": os.environ.get("USE_LOCAL_STORAGE", "false").lower() == "true",
     }
 
     logger.info("Initialising FL Server components...")

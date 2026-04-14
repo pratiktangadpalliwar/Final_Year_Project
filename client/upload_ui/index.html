@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FL Fraud Detection — Bank Operator Dashboard</title>
+  <title>FL Fraud Detection — Monitoring Dashboard</title>
 
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -72,8 +72,7 @@
     main {
       padding: 24px 28px;
       display: grid;
-      grid-template-columns: 340px 1fr;
-      grid-template-rows: auto auto;
+      grid-template-columns: 1fr 1fr;
       gap: 20px;
       max-width: 1400px;
       margin: 0 auto;
@@ -95,80 +94,12 @@
       display: flex; align-items: center; gap: 8px;
     }
 
-    /* Upload panel */
-    .upload-panel { grid-row: 1 / 3; }
-
-    .bank-select {
-      width: 100%;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text);
-      padding: 9px 12px;
-      font-size: 13px;
-      margin-bottom: 14px;
-      outline: none;
-      cursor: pointer;
-    }
-    .bank-select:focus { border-color: var(--accent); }
-    .bank-select option { background: var(--surface2); }
-
-    .drop-zone {
-      border: 2px dashed var(--border);
-      border-radius: 8px;
-      padding: 32px 20px;
-      text-align: center;
-      cursor: pointer;
-      transition: all .2s;
-      background: var(--surface2);
-      margin-bottom: 14px;
-      min-height: 150px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-    }
-    .drop-zone.dragover { border-color: var(--accent); background: rgba(0,188,212,.06); }
-    .drop-zone.has-file { border-color: var(--success); border-style: solid; }
-    .drop-zone .icon { font-size: 32px; }
-    .drop-zone p { color: var(--muted); font-size: 13px; line-height: 1.5; }
-    .drop-zone .filename { color: var(--text); font-weight: 600; word-break: break-all; }
-
-    .btn {
-      display: block;
-      width: 100%;
-      padding: 11px;
-      border: none;
-      border-radius: 6px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all .15s;
-      text-align: center;
-    }
-    .btn-primary {
-      background: var(--accent);
-      color: var(--bg);
-    }
-    .btn-primary:hover:not(:disabled) { background: var(--accent2); }
-    .btn-primary:disabled { opacity: .4; cursor: not-allowed; }
-
-    .alert {
-      margin-top: 12px;
-      padding: 10px 14px;
-      border-radius: 6px;
-      font-size: 13px;
-      line-height: 1.5;
-    }
-    .alert-success { background: rgba(76,175,80,.12);  color: #80e27e; border: 1px solid rgba(76,175,80,.3); }
-    .alert-error   { background: rgba(244,67,54,.12);  color: #ef9a9a; border: 1px solid rgba(244,67,54,.3); }
-    .alert-info    { background: rgba(0,188,212,.10);  color: var(--accent); border: 1px solid rgba(0,188,212,.25); }
+    .full-width { grid-column: 1 / -1; }
 
     /* Status panel */
     .stat-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
       gap: 12px;
       margin-bottom: 16px;
     }
@@ -220,8 +151,7 @@
     .badge-suspended{ background: rgba(244,67,54,.25);   color: #f44336; }
 
     /* Metrics chart */
-    .chart-panel { grid-column: 2 / 3; }
-    .chart-wrap  { position: relative; height: 260px; }
+    .chart-wrap  { position: relative; height: 300px; }
 
     .metrics-row {
       display: grid;
@@ -260,9 +190,17 @@
     .agg-trimmed   { background: rgba(255,152,0,.15); color: #ffcc02; }
     .agg-median    { background: rgba(156,39,176,.15); color: #ce93d8; }
 
+    /* Comm overhead row */
+    .comm-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 12px;
+    }
+
     @media (max-width: 900px) {
       main { grid-template-columns: 1fr; }
-      .upload-panel { grid-row: auto; }
+      .stat-grid { grid-template-columns: 1fr 1fr; }
     }
   </style>
 </head>
@@ -270,19 +208,19 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect, useRef, useCallback } = React;
+    const { useState, useEffect, useRef } = React;
 
     // ── Config ──────────────────────────────────────────────────────
-    const API_BASE    = window.FL_SERVER_URL || '';
+    let API_BASE      = window.FL_SERVER_URL || localStorage.getItem('fl_server_url') || 'http://localhost:8080';
     const POLL_MS     = 5000;
     const BANK_OPTIONS = [
-      { id: 'bank_01_retail_urban',     label: 'MetroRetail Bank'          },
-      { id: 'bank_02_corporate',        label: 'CorpFinance Bank'          },
-      { id: 'bank_03_regional_rural',   label: 'Heartland Community Bank'  },
-      { id: 'bank_04_neobank_digital',  label: 'NeoVault Digital Bank'     },
-      { id: 'bank_05_international',    label: 'GlobalTrade Bank'          },
-      { id: 'bank_06_credit_union',     label: 'SafeHarbor Credit Union'   },
-      { id: 'bank_07_investment_premium', label: 'PinnacleWealth Bank'    },
+      { id: 'bank_01_retail_urban',       label: 'Bank 01 — MetroRetail Bank (Retail Urban)'        },
+      { id: 'bank_02_corporate',          label: 'Bank 02 — CorpFinance Bank (Corporate)'           },
+      { id: 'bank_03_regional_rural',     label: 'Bank 03 — Heartland Community Bank (Rural)'       },
+      { id: 'bank_04_neobank_digital',    label: 'Bank 04 — NeoVault Digital Bank (Neobank)'        },
+      { id: 'bank_05_international',      label: 'Bank 05 — GlobalTrade Bank (International)'       },
+      { id: 'bank_06_credit_union',       label: 'Bank 06 — SafeHarbor Credit Union'                },
+      { id: 'bank_07_investment_premium', label: 'Bank 07 — PinnacleWealth Bank (Investment)'       },
     ];
 
     // ── Helpers ─────────────────────────────────────────────────────
@@ -358,7 +296,7 @@
 
       if (!history.length) {
         return (
-          <div style={{ height: 260, display: 'flex', alignItems: 'center',
+          <div style={{ height: 300, display: 'flex', alignItems: 'center',
                         justifyContent: 'center', color: 'var(--muted)' }}>
             No round data yet — waiting for first aggregation
           </div>
@@ -389,8 +327,8 @@
               const color  = trustColor(score);
               return (
                 <tr key={id}>
-                  <td style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis',
-                               whiteSpace: 'nowrap', title: id }}>{label}</td>
+                  <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis',
+                               whiteSpace: 'nowrap' }} title={id}>{label}</td>
                   <td>
                     <div className="trust-bar-wrap">
                       <div className="trust-bar-bg">
@@ -419,122 +357,12 @@
       );
     }
 
-    // ── UploadPanel ─────────────────────────────────────────────────
-    function UploadPanel({ bankId, setBankId }) {
-      const [dragOver,  setDragOver]  = useState(false);
-      const [file,      setFile]      = useState(null);
-      const [uploading, setUploading] = useState(false);
-      const [result,    setResult]    = useState(null);
-      const inputRef = useRef(null);
-
-      const accept = useCallback(f => {
-        if (!f) return;
-        if (!f.name.toLowerCase().endsWith('.csv')) {
-          setResult({ error: 'Only CSV files accepted.' }); return;
-        }
-        setFile(f); setResult(null);
-      }, []);
-
-      const onDrop = useCallback(e => {
-        e.preventDefault(); setDragOver(false);
-        accept(e.dataTransfer.files[0]);
-      }, [accept]);
-
-      const handleUpload = async () => {
-        if (!file) return;
-        setUploading(true); setResult(null);
-        const fd = new FormData();
-        fd.append('file',    file);
-        fd.append('bank_id', bankId);
-        try {
-          const r    = await fetch(`${API_BASE}/upload`, { method: 'POST', body: fd });
-          const data = await r.json();
-          if (r.ok) { setResult({ ok: true, data }); setFile(null); }
-          else      { setResult({ error: data.error || 'Upload failed' }); }
-        } catch (err) {
-          setResult({ error: `Network error: ${err.message}` });
-        } finally {
-          setUploading(false);
-        }
-      };
-
-      return (
-        <div className="card upload-panel">
-          <div className="card-title">
-            <span>&#128196;</span> CSV Upload
-          </div>
-
-          <label style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6,
-                          display: 'block', textTransform: 'uppercase', letterSpacing: '.5px' }}>
-            Bank Node
-          </label>
-          <select className="bank-select" value={bankId}
-                  onChange={e => { setBankId(e.target.value); setResult(null); }}>
-            {BANK_OPTIONS.map(b => (
-              <option key={b.id} value={b.id}>{b.label}</option>
-            ))}
-          </select>
-
-          <div
-            className={`drop-zone ${dragOver ? 'dragover' : ''} ${file ? 'has-file' : ''}`}
-            onClick={() => inputRef.current?.click()}
-            onDragOver={e  => { e.preventDefault(); setDragOver(true);  }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={onDrop}
-          >
-            <input ref={inputRef} type="file" accept=".csv"
-                   style={{ display: 'none' }}
-                   onChange={e => accept(e.target.files[0])} />
-            {file ? (
-              <>
-                <span className="icon">&#9989;</span>
-                <span className="filename">{file.name}</span>
-                <span style={{ color: 'var(--muted)', fontSize: 12 }}>
-                  {(file.size / 1e6).toFixed(2)} MB — click to change
-                </span>
-              </>
-            ) : (
-              <>
-                <span className="icon">&#128229;</span>
-                <p>Drag &amp; drop your CSV here<br />or <strong style={{ color: 'var(--accent)' }}>click to browse</strong></p>
-                <p style={{ fontSize: 11 }}>Required columns: transaction_amount, is_fraud</p>
-              </>
-            )}
-          </div>
-
-          <button className="btn btn-primary" disabled={!file || uploading}
-                  onClick={handleUpload}>
-            {uploading
-              ? <><span className="spinner" style={{ verticalAlign: 'middle', marginRight: 8 }} />Uploading…</>
-              : '&#9654; Trigger Training'}
-          </button>
-
-          {result?.ok && (
-            <div className="alert alert-success">
-              &#10003; Uploaded <strong>{result.data.filename || result.data.s3_key}</strong>
-              {' '}to <em>{result.data.mode}</em>.<br />
-              Bank watcher will detect and begin training automatically.
-            </div>
-          )}
-          {result?.error && (
-            <div className="alert alert-error">&#9888; {result.error}</div>
-          )}
-
-          <div className="alert alert-info" style={{ marginTop: 16 }}>
-            <strong>How it works:</strong> Drop a transaction CSV — the bank's watcher
-            detects it, registers with the FL server, trains locally, and submits
-            encrypted weight updates. No raw data ever leaves this node.
-          </div>
-        </div>
-      );
-    }
-
     // ── StatusPanel ─────────────────────────────────────────────────
     function StatusPanel({ status }) {
       if (!status) return (
-        <div className="card" style={{ display: 'flex', alignItems: 'center',
-                                       justifyContent: 'center', minHeight: 180 }}>
-          <span className="spinner" /> &nbsp; Connecting to FL server…
+        <div className="card full-width" style={{ display: 'flex', alignItems: 'center',
+                                                   justifyContent: 'center', minHeight: 180 }}>
+          <span className="spinner" /> &nbsp; Connecting to FL server...
         </div>
       );
 
@@ -548,8 +376,8 @@
 
       return (
         <>
-          {/* Round stats */}
-          <div className="card">
+          {/* Round stats — full width */}
+          <div className="card full-width">
             <div className="card-title"><span>&#128200;</span> Round Status</div>
             <div className="stat-grid">
               <div className="stat-box">
@@ -598,34 +426,50 @@
             )}
           </div>
 
-          {/* Last round metrics */}
-          <div className="card chart-panel">
+          {/* Training metrics chart — full width */}
+          <div className="card full-width">
             <div className="card-title"><span>&#128202;</span> Training Metrics</div>
             {Object.keys(lm).length > 0 && (
-              <div className="metrics-row">
-                <div className="mini-stat">
-                  <div className="label">Avg Loss</div>
-                  <div className="value">{fmt(lm.avg_loss, 4)}</div>
+              <>
+                <div className="metrics-row">
+                  <div className="mini-stat">
+                    <div className="label">Avg Loss</div>
+                    <div className="value">{fmt(lm.avg_loss, 4)}</div>
+                  </div>
+                  <div className="mini-stat">
+                    <div className="label">Avg F1</div>
+                    <div className="value">{fmt(lm.avg_f1, 3)}</div>
+                  </div>
+                  <div className="mini-stat">
+                    <div className="label">Avg AUC</div>
+                    <div className="value">{fmt(lm.avg_auc, 3)}</div>
+                  </div>
+                  <div className="mini-stat">
+                    <div className="label">Accuracy</div>
+                    <div className="value">{pct(lm.avg_accuracy)}</div>
+                  </div>
                 </div>
-                <div className="mini-stat">
-                  <div className="label">Avg F1</div>
-                  <div className="value">{fmt(lm.avg_f1, 3)}</div>
+                <div className="comm-row">
+                  <div className="mini-stat">
+                    <div className="label">Comm Overhead</div>
+                    <div className="value">{fmt(lm.comm_overhead_mb, 2)} <span style={{fontSize:11}}>MB</span></div>
+                  </div>
+                  <div className="mini-stat">
+                    <div className="label">Convergence Rate</div>
+                    <div className="value">{fmt(lm.convergence_rate, 4)}</div>
+                  </div>
+                  <div className="mini-stat">
+                    <div className="label">Participants</div>
+                    <div className="value">{lm.n_participated || '—'}</div>
+                  </div>
                 </div>
-                <div className="mini-stat">
-                  <div className="label">Avg AUC</div>
-                  <div className="value">{fmt(lm.avg_auc, 3)}</div>
-                </div>
-                <div className="mini-stat">
-                  <div className="label">Accuracy</div>
-                  <div className="value">{pct(lm.avg_accuracy)}</div>
-                </div>
-              </div>
+              </>
             )}
             <MetricsChartWrapper />
           </div>
 
           {/* Trust scores */}
-          <div className="card">
+          <div className="card full-width">
             <div className="card-title"><span>&#128274;</span> Node Trust Scores</div>
             <TrustTable trustScores={trust_scores} suspended={suspended_nodes} />
           </div>
@@ -657,7 +501,16 @@
     function App() {
       const [status,  setStatus]  = useState(null);
       const [online,  setOnline]  = useState(null);
-      const [bankId,  setBankId]  = useState('bank_01_retail_urban');
+      const [serverUrl, setServerUrl] = useState(API_BASE);
+      const [editingUrl, setEditingUrl] = useState(false);
+
+      const applyUrl = (url) => {
+        const trimmed = url.replace(/\/+$/, '');
+        API_BASE = trimmed;
+        localStorage.setItem('fl_server_url', trimmed);
+        setServerUrl(trimmed);
+        setEditingUrl(false);
+      };
 
       useEffect(() => {
         const poll = async () => {
@@ -676,24 +529,46 @@
         poll();
         const id = setInterval(poll, POLL_MS);
         return () => clearInterval(id);
-      }, []);
+      }, [serverUrl]);
 
       return (
         <>
           <header>
             <div className="logo">FL</div>
             <div>
-              <h1>Federated Learning — Bank Operator Dashboard</h1>
+              <h1>Federated Learning — Monitoring Dashboard</h1>
               <div className="subtitle">Financial Fraud Detection · Byzantine-Resilient · 7-Node Consortium</div>
             </div>
-            <div className={`conn-badge ${online === false ? 'err' : 'ok'}`}>
-              <span className="dot" />
-              {online === null ? 'Connecting…' : online ? 'Server Online' : 'Server Offline'}
+            <div style={{marginLeft:'auto', display:'flex', alignItems:'center', gap:'10px'}}>
+              {editingUrl ? (
+                <form onSubmit={e => { e.preventDefault(); applyUrl(e.target.url.value); }}
+                      style={{display:'flex', gap:'6px'}}>
+                  <input name="url" defaultValue={serverUrl}
+                         style={{background:'var(--surface2)', border:'1px solid var(--border)',
+                                 color:'var(--text)', padding:'4px 10px', borderRadius:'6px',
+                                 fontSize:'12px', width:'260px'}}
+                         placeholder="http://localhost:8080" />
+                  <button type="submit" style={{background:'var(--accent)', color:'var(--bg)',
+                          border:'none', borderRadius:'6px', padding:'4px 12px', fontSize:'12px',
+                          cursor:'pointer', fontWeight:600}}>Set</button>
+                </form>
+              ) : (
+                <span onClick={() => setEditingUrl(true)}
+                      style={{fontSize:'11px', color:'var(--muted)', cursor:'pointer',
+                              textDecoration:'underline dotted', maxWidth:'220px',
+                              overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}
+                      title="Click to change server URL">
+                  {serverUrl}
+                </span>
+              )}
+              <div className={`conn-badge ${online === false ? 'err' : 'ok'}`}>
+                <span className="dot" />
+                {online === null ? 'Connecting...' : online ? 'Online' : 'Offline'}
+              </div>
             </div>
           </header>
 
           <main>
-            <UploadPanel bankId={bankId} setBankId={setBankId} />
             <StatusPanel status={status} />
           </main>
         </>

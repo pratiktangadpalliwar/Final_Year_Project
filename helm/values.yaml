@@ -56,15 +56,15 @@ clients:
     name:       "MetroRetail Bank"
     fault:      node_crash
     resources:
-      requests: { cpu: "1000m", memory: "2Gi" }
-      limits:   { cpu: "4000m", memory: "8Gi" }
+      requests: { cpu: "500m",  memory: "1Gi" }
+      limits:   { cpu: "2000m", memory: "2Gi" }
 
   - id:         bank_02_corporate
     name:       "CorpFinance Bank"
     fault:      straggler
     resources:
-      requests: { cpu: "1000m", memory: "2Gi" }
-      limits:   { cpu: "4000m", memory: "8Gi" }
+      requests: { cpu: "500m",  memory: "1Gi" }
+      limits:   { cpu: "2000m", memory: "2Gi" }
 
   - id:         bank_03_regional_rural
     name:       "Heartland Community Bank"
@@ -77,15 +77,15 @@ clients:
     name:       "NeoVault Digital Bank"
     fault:      byzantine
     resources:
-      requests: { cpu: "1000m", memory: "2Gi" }
-      limits:   { cpu: "4000m", memory: "8Gi" }
+      requests: { cpu: "500m",  memory: "1Gi" }
+      limits:   { cpu: "2000m", memory: "2Gi" }
 
   - id:         bank_05_international
     name:       "GlobalTrade Bank"
     fault:      dropout_rejoin
     resources:
-      requests: { cpu: "1000m", memory: "2Gi" }
-      limits:   { cpu: "4000m", memory: "8Gi" }
+      requests: { cpu: "500m",  memory: "1Gi" }
+      limits:   { cpu: "2000m", memory: "2Gi" }
 
   - id:         bank_06_credit_union
     name:       "SafeHarbor Credit Union"
@@ -98,20 +98,18 @@ clients:
     name:       "PinnacleWealth Bank"
     fault:      none
     resources:
-      requests: { cpu: "1000m", memory: "2Gi" }
-      limits:   { cpu: "4000m", memory: "8Gi" }
+      requests: { cpu: "500m",  memory: "1Gi" }
+      limits:   { cpu: "2000m", memory: "2Gi" }
 
 # ── AWS Infrastructure ─────────────────────────────────────────────
 aws:
-  s3Bucket:       fl-models-prod
+  s3Bucket:       "fl-models-prod-{{ .Values.global.awsAccountId }}"
   dynamodbTable:  fl-rounds
   sqsQueue:       fl-updates
-  useLocalStorage: false
 
 # ── Storage ────────────────────────────────────────────────────────
+# Datasets are loaded locally via kubectl cp — no PVCs needed for upload
 storage:
-  inputPvcSize:     10Gi
-  processedPvcSize: 20Gi
   storageClass:     gp2
 
 # ── Training hyperparameters ───────────────────────────────────────
