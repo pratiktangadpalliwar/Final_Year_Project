@@ -21,6 +21,7 @@ class Settings(BaseSettings):
 
     # --- dataset (init container drops here) ---
     dataset_path: str = "/work/data/bank.csv"
+    dataset_min_bytes: int = 1024 * 1024  # 1MB; lower for compose e2e fixture
 
     # --- training ---
     local_epochs: int = 10

@@ -53,7 +53,7 @@ def main() -> None:
     s = Settings()
     bank_name = s.bank_name or s.bank_id
 
-    assert_dataset_present(s.dataset_path)
+    assert_dataset_present(s.dataset_path, min_size_bytes=s.dataset_min_bytes)
 
     df = load_dataset(s.dataset_path)
     n_samples = len(df)
