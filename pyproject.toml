@@ -32,7 +32,7 @@ ignore = ["E501"]  # line length handled by formatter
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra -q --strict-markers"
+addopts = "-ra -q --strict-markers --tb=short"
 markers = [
     "integration: requires moto/minio",
     "e2e: requires docker-compose",
