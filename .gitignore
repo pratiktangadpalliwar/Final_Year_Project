@@ -11,6 +11,7 @@ dist/
 .env
 .env.local
 .superpowers/
+.claude/
 .terraform/
 .terraform.lock.hcl
 node_modules/
