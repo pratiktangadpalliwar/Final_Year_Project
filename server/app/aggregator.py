@@ -16,10 +16,17 @@ import torch
 Method = Literal["fedavg", "trimmed_mean", "krum"]
 
 
+def _is_float(t: torch.Tensor) -> bool:
+    return t.is_floating_point()
+
+
 def fedavg(updates: list[dict[str, torch.Tensor]], n_samples: list[int]) -> dict[str, torch.Tensor]:
     total = sum(n_samples)
     out: dict[str, torch.Tensor] = {}
-    for k in updates[0]:
+    for k, ref in updates[0].items():
+        if not _is_float(ref):
+            out[k] = ref.clone()  # int buffers (e.g. BN num_batches_tracked) pass through
+            continue
         out[k] = sum(u[k] * (n / total) for u, n in zip(updates, n_samples, strict=True))
     return out
 
@@ -28,8 +35,11 @@ def trimmed_mean(updates: list[dict[str, torch.Tensor]], trim_ratio: float = 0.1
     n = len(updates)
     k_trim = max(1, int(n * trim_ratio))
     out: dict[str, torch.Tensor] = {}
-    for key in updates[0]:
-        stack = torch.stack([u[key] for u in updates], dim=0)  # (n, ...)
+    for key, ref in updates[0].items():
+        if not _is_float(ref):
+            out[key] = ref.clone()
+            continue
+        stack = torch.stack([u[key] for u in updates], dim=0)
         sorted_, _ = stack.sort(dim=0)
         trimmed = sorted_[k_trim : n - k_trim]
         out[key] = trimmed.mean(dim=0)
@@ -40,7 +50,7 @@ def krum(updates: list[dict[str, torch.Tensor]], n_byzantine: int = 1) -> dict[s
     """Picks the single update whose sum-of-squared-distances to its (n - n_byz - 2)
     nearest neighbours is minimal. Reference: Blanchard et al. 2017."""
     n = len(updates)
-    flats = [torch.cat([t.flatten() for t in u.values()]) for u in updates]
+    flats = [torch.cat([t.flatten().float() for t in u.values() if _is_float(t)]) for u in updates]
     dists = torch.zeros(n, n)
     for i in range(n):
         for j in range(n):

@@ -27,16 +27,19 @@ class DPEngine:
         return gaussian_sigma(self.epsilon, self.delta, self.clip_norm)
 
     def clip(self, weights: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-        flat = torch.cat([t.flatten() for t in weights.values()])
+        flat = torch.cat([t.flatten() for t in weights.values() if t.is_floating_point()])
         norm = flat.norm().item()
         if norm <= self.clip_norm:
             return {k: v.clone() for k, v in weights.items()}
         scale = self.clip_norm / norm
-        return {k: v * scale for k, v in weights.items()}
+        return {k: (v * scale if v.is_floating_point() else v.clone()) for k, v in weights.items()}
 
     def add_noise(self, weights: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         s = self.sigma
-        return {k: v + torch.randn_like(v) * s for k, v in weights.items()}
+        return {
+            k: (v + torch.randn_like(v) * s if v.is_floating_point() else v.clone())
+            for k, v in weights.items()
+        }
 
     def privatize(self, weights: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         return self.add_noise(self.clip(weights))

@@ -8,7 +8,8 @@ import torch
 
 
 def _flatten(weights: dict[str, torch.Tensor]) -> torch.Tensor:
-    return torch.cat([t.flatten() for t in weights.values()])
+    # int buffers (e.g. BN num_batches_tracked) excluded — float-only for norm/cosine
+    return torch.cat([t.flatten().float() for t in weights.values() if t.is_floating_point()])
 
 
 @dataclass
