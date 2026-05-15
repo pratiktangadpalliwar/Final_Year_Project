@@ -6,8 +6,9 @@ from __future__ import annotations
 import logging
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
 
 import torch
 

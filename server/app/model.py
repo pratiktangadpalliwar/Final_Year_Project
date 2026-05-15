@@ -9,7 +9,6 @@ from __future__ import annotations
 import torch
 from torch import nn
 
-
 INPUT_DIM = 19
 HIDDEN_DIMS = (64, 32, 16)
 

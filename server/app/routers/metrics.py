@@ -11,7 +11,6 @@ from fastapi import APIRouter, HTTPException
 from server.app.control_plane import ControlPlane
 from server.app.round_manager import RoundManager
 
-
 _global_history: deque[dict[str, Any]] = deque(maxlen=1000)
 _bank_history: dict[str, deque[dict[str, Any]]] = defaultdict(lambda: deque(maxlen=1000))
 

@@ -4,7 +4,6 @@ import torch
 
 from client.app.preprocessor import preprocess
 
-
 _CSV = Path(__file__).resolve().parents[2] / "shared" / "golden_inputs" / "tiny_bank.csv"
 
 

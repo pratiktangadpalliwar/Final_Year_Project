@@ -10,10 +10,9 @@ Layer 4 — Node reputation system             (in round_manager)
 """
 
 import logging
+
 import numpy as np
 import torch
-from typing import List, Dict, Tuple, Optional
-
 from dp_engine import DifferentialPrivacy
 
 logger = logging.getLogger("fl-server")
@@ -40,7 +39,7 @@ class FedAvgAggregator:
     # ══════════════════════════════════════════════════════════════
     # MAIN AGGREGATION ENTRY POINT
     # ══════════════════════════════════════════════════════════════
-    def aggregate(self, updates: List[dict]) -> Tuple[Optional[list], dict]:
+    def aggregate(self, updates: list[dict]) -> tuple[list | None, dict]:
         """
         Aggregate client updates with robust defense.
 
@@ -107,7 +106,7 @@ class FedAvgAggregator:
     # ══════════════════════════════════════════════════════════════
     # WEIGHT LOADING
     # ══════════════════════════════════════════════════════════════
-    def _load_weights(self, updates: List[dict]) -> List[dict]:
+    def _load_weights(self, updates: list[dict]) -> list[dict]:
         """Load weight tensors from storage for each update."""
         loaded = []
         for u in updates:
@@ -123,7 +122,7 @@ class FedAvgAggregator:
     # ══════════════════════════════════════════════════════════════
     # LAYER 1 — PER-UPDATE VALIDATION
     # ══════════════════════════════════════════════════════════════
-    def _validate_updates(self, updates: List[dict]) -> Tuple[List[dict], List[dict]]:
+    def _validate_updates(self, updates: list[dict]) -> tuple[list[dict], list[dict]]:
         """
         Check each update for:
         1. NaN/Inf values
@@ -137,7 +136,7 @@ class FedAvgAggregator:
         median_flat = np.median(flats, axis=0)
         median_norm = np.linalg.norm(median_flat)
 
-        for u, flat in zip(updates, flats):
+        for u, flat in zip(updates, flats, strict=False):
             reasons = []
 
             # Check 1: NaN / Inf
@@ -166,7 +165,7 @@ class FedAvgAggregator:
     # ══════════════════════════════════════════════════════════════
     # STRATEGY SELECTION
     # ══════════════════════════════════════════════════════════════
-    def _select_strategy(self, updates: List[dict],
+    def _select_strategy(self, updates: list[dict],
                          suspicious_ratio: float) -> str:
         n = len(updates)
         if n < 2:
@@ -180,7 +179,7 @@ class FedAvgAggregator:
     # ══════════════════════════════════════════════════════════════
     # AGGREGATION METHODS
     # ══════════════════════════════════════════════════════════════
-    def _weighted_fedavg(self, updates: List[dict]) -> Tuple[np.ndarray, List[str]]:
+    def _weighted_fedavg(self, updates: list[dict]) -> tuple[np.ndarray, list[str]]:
         """Standard weighted FedAvg."""
         total    = sum(u["n_samples"] for u in updates)
         agg_flat = np.zeros(self._weights_to_flat(updates[0]["weights"]).shape)
@@ -192,7 +191,7 @@ class FedAvgAggregator:
 
         return agg_flat, []
 
-    def _krum(self, updates: List[dict]) -> Tuple[np.ndarray, List[str]]:
+    def _krum(self, updates: list[dict]) -> tuple[np.ndarray, list[str]]:
         """
         Krum: select the update with minimum sum of distances
         to its f nearest neighbours (f = estimated Byzantine nodes).
@@ -215,7 +214,7 @@ class FedAvgAggregator:
 
         return flats[best_idx], rejected
 
-    def _trimmed_mean(self, updates: List[dict]) -> Tuple[np.ndarray, List[str]]:
+    def _trimmed_mean(self, updates: list[dict]) -> tuple[np.ndarray, list[str]]:
         """
         Coordinate-wise trimmed mean.
         Removes top/bottom trim_ratio% of values per coordinate.
@@ -231,7 +230,7 @@ class FedAvgAggregator:
 
         return result, []
 
-    def _coordinate_median(self, updates: List[dict]) -> Tuple[np.ndarray, List[str]]:
+    def _coordinate_median(self, updates: list[dict]) -> tuple[np.ndarray, list[str]]:
         """Coordinate-wise median — provably Byzantine resilient."""
         flats  = np.array([self._weights_to_flat(u["weights"]).numpy()
                            for u in updates])

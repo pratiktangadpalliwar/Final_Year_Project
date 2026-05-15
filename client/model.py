@@ -6,9 +6,9 @@ and client (local training). Keep this file identical in both
 server/ and client/ directories.
 """
 
+
 import torch
 import torch.nn as nn
-from typing import List
 
 
 class FraudDetectionModel(nn.Module):
@@ -24,7 +24,7 @@ class FraudDetectionModel(nn.Module):
     """
 
     def __init__(self, input_dim: int = 19,
-                 hidden_dims: List[int] = None,
+                 hidden_dims: list[int] = None,
                  dropout: float = 0.3):
         super().__init__()
         if hidden_dims is None:
@@ -64,19 +64,19 @@ class FraudDetectionModel(nn.Module):
             logits = self.forward(x)
             return torch.sigmoid(logits).squeeze()
 
-    def get_weights(self) -> List[torch.Tensor]:
+    def get_weights(self) -> list[torch.Tensor]:
         """Return list of parameter tensors (detached copies)."""
         return [p.data.clone() for p in self.parameters()]
 
-    def set_weights(self, weights: List[torch.Tensor]):
+    def set_weights(self, weights: list[torch.Tensor]):
         """Load weight tensors into model parameters."""
-        for p, w in zip(self.parameters(), weights):
+        for p, w in zip(self.parameters(), weights, strict=False):
             p.data.copy_(w)
 
     @staticmethod
-    def from_weights(weights: List[torch.Tensor],
+    def from_weights(weights: list[torch.Tensor],
                      input_dim: int = 19,
-                     hidden_dims: List[int] = None) -> "FraudDetectionModel":
+                     hidden_dims: list[int] = None) -> "FraudDetectionModel":
         """Create a model and immediately load weights."""
         model = FraudDetectionModel(input_dim, hidden_dims)
         model.set_weights(weights)

@@ -1,7 +1,10 @@
 """client/storage_client.py — S3/local storage for bank node."""
 
-import os, io, logging
+import io
+import logging
+import os
 from pathlib import Path
+
 import torch
 
 logger    = logging.getLogger("fl-client")

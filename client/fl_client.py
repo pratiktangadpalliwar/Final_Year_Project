@@ -6,19 +6,16 @@ Orchestrates the full training pipeline:
   register → download model → train → upload update → notify
 """
 
-import os
 import io
+import os
 import time
-import logging
-import requests
 from pathlib import Path
-from typing  import Optional
 
+import requests
 import torch
-
 from preprocessor import Preprocessor
-from trainer      import LocalTrainer
-from utils        import setup_logging
+from trainer import LocalTrainer
+from utils import setup_logging
 
 logger     = setup_logging("fl-client")
 STORAGE_DIR= Path(os.environ.get("LOCAL_STORAGE_DIR", "/tmp/fl-client"))
@@ -163,7 +160,7 @@ class FLClient:
         logger.error("Failed to register after 5 attempts")
         return False
 
-    def _get_global_model(self) -> Optional[list]:
+    def _get_global_model(self) -> list | None:
         try:
             resp = self.session.get(
                 f"{self.server_url}/model/global",
@@ -206,7 +203,7 @@ class FLClient:
             logger.warning(f"Could not download global model: {e} — using random init")
             return None
 
-    def _upload_update(self, weights: list) -> Optional[str]:
+    def _upload_update(self, weights: list) -> str | None:
         try:
             key = (f"updates/{self.bank_id}/"
                    f"round_{self.current_round:04d}.pt")

@@ -5,14 +5,12 @@ Prepares the bank CSV for PyTorch training.
 Handles feature engineering, encoding, scaling, and train/val split.
 """
 
-import logging
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
-from pathlib import Path
-from typing  import Tuple, Optional
-from sklearn.model_selection  import train_test_split
-from sklearn.preprocessing    import StandardScaler
-
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 from utils import setup_logging
 
 logger = setup_logging("preprocessor")
@@ -60,8 +58,8 @@ class Preprocessor:
         csv_path: Path,
         val_size: float = 0.15,
         random_state: int = 42,
-    ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray],
-               Optional[np.ndarray], Optional[np.ndarray], int]:
+    ) -> tuple[np.ndarray | None, np.ndarray | None,
+               np.ndarray | None, np.ndarray | None, int]:
         """
         Load and prepare CSV for training.
 
@@ -174,7 +172,7 @@ class Preprocessor:
     # ── Extract feature matrix ────────────────────────────────────
     def _extract_arrays(
         self, df: pd.DataFrame
-    ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+    ) -> tuple[np.ndarray | None, np.ndarray | None]:
 
         if TARGET_COL not in df.columns:
             logger.error(f"Target column '{TARGET_COL}' not found")

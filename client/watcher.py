@@ -10,17 +10,16 @@ the full FL training pipeline automatically.
 Runs as the Docker container's main process (CMD in Dockerfile).
 """
 
+import hashlib
 import os
+import shutil
 import sys
 import time
-import shutil
-import logging
-import hashlib
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 from fl_client import FLClient
-from utils     import setup_logging
+from utils import setup_logging
 
 logger    = setup_logging("bank-watcher")
 INPUT_DIR = Path(os.environ.get("INPUT_DIR",     "/data/input"))
@@ -176,7 +175,7 @@ def watch():
     poll_secs = int(os.environ.get("POLL_INTERVAL_SECONDS", "10"))
 
     logger.info("=" * 55)
-    logger.info(f"  FL Bank Node Started")
+    logger.info("  FL Bank Node Started")
     logger.info(f"  Bank ID   : {bank_id}")
     logger.info(f"  Bank Name : {bank_name}")
     logger.info(f"  Server    : {server_url}")

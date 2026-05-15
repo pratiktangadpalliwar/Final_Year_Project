@@ -2,7 +2,6 @@
 server/dp_engine.py  —  Differential Privacy (Gaussian mechanism)
 """
 import numpy as np
-import torch
 
 
 class DifferentialPrivacy:

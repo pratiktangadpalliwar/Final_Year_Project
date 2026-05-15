@@ -5,17 +5,15 @@ Manages FL training rounds, node registry, trust scoring,
 checkpointing, rollback, and fault tolerance logic.
 """
 
-import os
 import copy
-import json
 import logging
+import os
 import threading
 import time
-from datetime import datetime, timedelta
-from typing  import Dict, List, Optional, Tuple
+from datetime import datetime
 
-import torch
 import numpy as np
+import torch
 
 logger = logging.getLogger("fl-server")
 
@@ -40,19 +38,19 @@ class RoundManager:
         self.current_round   = 0
         self.model_version   = "v0.0"
         self.global_weights  = None     # current global model weights (list of tensors)
-        self.checkpoint_history: List[dict] = []
+        self.checkpoint_history: list[dict] = []
 
         # Node registry
-        self.registered_nodes: Dict[str, dict] = {}
+        self.registered_nodes: dict[str, dict] = {}
         self.suspended_nodes : set = set()
-        self.trust_scores    : Dict[str, float] = {}
+        self.trust_scores    : dict[str, float] = {}
 
         # Per-round update tracking
-        self.pending_updates : Dict[str, dict] = {}
+        self.pending_updates : dict[str, dict] = {}
         self._lock           = threading.Lock()
 
         # Metrics
-        self.metrics_history : List[dict] = []
+        self.metrics_history : list[dict] = []
         self.last_global_loss: float = float("inf")
 
         # Config
@@ -63,13 +61,13 @@ class RoundManager:
         self.round_timeout_seconds = int(os.environ.get("ROUND_TIMEOUT", "300"))
 
         # Straggler timeout thread
-        self._timeout_thread: Optional[threading.Thread] = None
-        self._round_start_time: Optional[datetime] = None
+        self._timeout_thread: threading.Thread | None = None
+        self._round_start_time: datetime | None = None
 
         # Callback wired by app.py to avoid circular import
         self._aggregation_callback = None
         # Byzantine tracking for rounds-to-recovery metric
-        self._byzantine_start_round: Optional[int] = None
+        self._byzantine_start_round: int | None = None
 
     def set_aggregation_callback(self, fn):
         """Register aggregation trigger — avoids circular import with app.py."""
@@ -197,14 +195,14 @@ class RoundManager:
         )
         return len(self.pending_updates) >= required
 
-    def get_pending_updates(self) -> List[dict]:
+    def get_pending_updates(self) -> list[dict]:
         with self._lock:
             return list(self.pending_updates.values())
 
     # ══════════════════════════════════════════════════════════════
     # MODEL VALIDATION (anti-corruption)
     # ══════════════════════════════════════════════════════════════
-    def validate_new_model(self, new_weights: list) -> Tuple[bool, str]:
+    def validate_new_model(self, new_weights: list) -> tuple[bool, str]:
         """
         Validate aggregated model before accepting it.
 
@@ -236,15 +234,15 @@ class RoundManager:
     def _compute_val_loss(self, weights: list, val_data: dict) -> float:
         """Quick validation loss computation using current model architecture."""
         try:
-            from model import FraudDetectionModel
             import torch.nn as nn
+            from model import FraudDetectionModel
 
             model = FraudDetectionModel(
                 input_dim   = self.cfg["input_dim"],
                 hidden_dims = self.cfg["hidden_dims"],
             )
             # Load weights
-            state = {k: v for k, v in zip(model.state_dict().keys(), weights)}
+            state = {k: v for k, v in zip(model.state_dict().keys(), weights, strict=False)}
             model.load_state_dict(state, strict=False)
             model.eval()
 
@@ -360,7 +358,7 @@ class RoundManager:
     # ══════════════════════════════════════════════════════════════
     # ROLLBACK
     # ══════════════════════════════════════════════════════════════
-    def rollback(self, target_round: Optional[int] = None) -> bool:
+    def rollback(self, target_round: int | None = None) -> bool:
         """
         Roll back to a previous checkpoint.
         If target_round is None, rolls back one round.

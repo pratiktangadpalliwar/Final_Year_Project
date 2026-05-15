@@ -5,17 +5,15 @@ Storage abstraction supporting AWS S3 (production) and
 local filesystem (development / docker-compose testing).
 """
 
-import os
 import io
 import json
 import logging
+import os
 import pickle
-from datetime  import datetime, timedelta
-from pathlib   import Path
-from typing    import Optional, List
+from datetime import datetime
+from pathlib import Path
 
 import torch
-import numpy as np
 
 logger = logging.getLogger("fl-server")
 
@@ -63,7 +61,7 @@ class S3Storage:
             return False
 
     # ── Download ──────────────────────────────────────────────────
-    def download_weights(self, key: str) -> Optional[list]:
+    def download_weights(self, key: str) -> list | None:
         if self.use_local:
             path = self.local_dir / key
             if not path.exists():
@@ -80,7 +78,7 @@ class S3Storage:
             return None
 
     @staticmethod
-    def load_weights_static(key: str) -> Optional[list]:
+    def load_weights_static(key: str) -> list | None:
         """Static loader used by aggregator."""
         storage = S3Storage.__new__(S3Storage)
         storage.use_local = USE_LOCAL
@@ -107,7 +105,7 @@ class S3Storage:
             return ""
 
     # ── Latest model key ──────────────────────────────────────────
-    def get_latest_model_key(self) -> Optional[str]:
+    def get_latest_model_key(self) -> str | None:
         if self.use_local:
             models = sorted(self.local_dir.glob("models/global_round_*.pt"))
             return str(models[-1].relative_to(self.local_dir)) if models else None
@@ -131,7 +129,7 @@ class S3Storage:
         key = f"models/global_round_{round_num:04d}.pt"
         return self.upload_weights(weights, key)
 
-    def load_latest_checkpoint(self) -> Optional[dict]:
+    def load_latest_checkpoint(self) -> dict | None:
         key = self.get_latest_model_key()
         if not key:
             return None
@@ -157,7 +155,7 @@ class S3Storage:
         return self.upload_weights(weights, "models/global_current.pt")
 
     # ── Validation set (for anti-corruption checks) ───────────────
-    def load_validation_set(self) -> Optional[dict]:
+    def load_validation_set(self) -> dict | None:
         """Load server-side held-out validation set if available."""
         key = "validation/val_set.pkl"
         if self.use_local:
@@ -213,7 +211,7 @@ class DynamoDBState:
         except Exception as e:
             logger.error(f"DynamoDB save failed: {e}")
 
-    def load_round_state(self, round_num: int) -> Optional[dict]:
+    def load_round_state(self, round_num: int) -> dict | None:
         if self.use_local:
             path = self.local_dir / f"state/round_{round_num:04d}.json"
             if not path.exists():

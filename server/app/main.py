@@ -13,10 +13,10 @@ from fastapi.staticfiles import StaticFiles
 from server.app.config import Settings
 from server.app.control_plane import ControlPlane
 from server.app.round_manager import RoundManager
-from server.app.routers import admin, client as client_router, metrics, ws
+from server.app.routers import admin, metrics, ws
+from server.app.routers import client as client_router
 from server.app.storage import Storage
 from server.app.ws_hub import WsHub
-
 
 _LOG = logging.getLogger("fl.server")
 _STATIC_DIR = Path(__file__).parent / "static"

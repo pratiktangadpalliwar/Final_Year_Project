@@ -18,17 +18,15 @@ No upload endpoint needed — data never leaves the bank node.
 
 import os
 import re
-import json
-import logging
 import threading
 from datetime import datetime
-from flask import Flask, request, jsonify
 
+from aggregator import FedAvgAggregator
+from dp_engine import DifferentialPrivacy
+from flask import Flask, jsonify, request
 from round_manager import RoundManager
-from aggregator   import FedAvgAggregator
-from dp_engine    import DifferentialPrivacy
-from storage      import S3Storage, DynamoDBState
-from utils        import setup_logging, validate_update
+from storage import DynamoDBState, S3Storage
+from utils import setup_logging, validate_update
 
 app    = Flask(__name__)
 logger = setup_logging("fl-server")

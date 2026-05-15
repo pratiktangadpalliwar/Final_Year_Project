@@ -31,7 +31,6 @@ import torch
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
-
 _SCALE_COLS = [
     "transaction_amount", "customer_age", "account_age_days",
     "avg_amount_customer", "std_amount_customer", "amount_vs_avg_ratio",

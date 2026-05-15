@@ -7,16 +7,13 @@ Handles class imbalance, DP noise injection, and metric reporting.
 
 import os
 import time
-import logging
-import numpy as np
-from typing import Optional, Tuple, List
 
+import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, TensorDataset, WeightedRandomSampler
-from sklearn.metrics  import roc_auc_score, f1_score, precision_score, recall_score
-
 from model import FraudDetectionModel
+from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_score
+from torch.utils.data import DataLoader, TensorDataset, WeightedRandomSampler
 from utils import setup_logging
 
 logger = setup_logging("fl-trainer")
@@ -62,8 +59,8 @@ class LocalTrainer:
         y_train        : np.ndarray,
         X_val          : np.ndarray,
         y_val          : np.ndarray,
-        global_weights : Optional[List[torch.Tensor]] = None,
-    ) -> Tuple[Optional[List[torch.Tensor]], dict]:
+        global_weights : list[torch.Tensor] | None = None,
+    ) -> tuple[list[torch.Tensor] | None, dict]:
         """
         Perform local training and return (weights, metrics).
         """
@@ -165,7 +162,7 @@ class LocalTrainer:
 
         return total_loss / max(len(loader), 1)
 
-    def _validate(self, model, loader, criterion) -> Tuple[float, dict]:
+    def _validate(self, model, loader, criterion) -> tuple[float, dict]:
         model.eval()
         total_loss = 0.0
         all_probs, all_labels = [], []
@@ -229,7 +226,7 @@ class LocalTrainer:
     # ══════════════════════════════════════════════════════════════
     # DIFFERENTIAL PRIVACY
     # ══════════════════════════════════════════════════════════════
-    def _apply_dp(self, weights: List[torch.Tensor]) -> List[torch.Tensor]:
+    def _apply_dp(self, weights: list[torch.Tensor]) -> list[torch.Tensor]:
         """Clip and add Gaussian noise to model weights."""
         sigma = (np.sqrt(2 * np.log(1.25 / float(DP_DELTA)))
                  * DP_CLIP_NORM / DP_EPSILON)

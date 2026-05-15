@@ -15,7 +15,6 @@ from server.app.control_plane import ControlPlane
 from server.app.round_manager import RoundManager
 from server.app.storage import Storage
 
-
 # Module-level pending updates queue. Keys: (round, bank_id) → payload.
 _pending: dict[tuple[int, str], dict[str, Any]] = {}
 
