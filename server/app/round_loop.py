@@ -97,11 +97,17 @@ async def run_one_round(
         else:
             rm.reward_node(bid)
 
-    cp.global_.state = "aggregating"
-    aggregator = Aggregator()
     valid_n = [n for u, n in zip(updates, n_samples, strict=True) if id(u) not in suspicious_set]
     if not valid_n:
-        valid, valid_n = updates, n_samples
+        # All submissions failed validation — treat as a stalled round rather than
+        # aggregating poisoned weights. Operator can clear faults and re-run.
+        cp.global_.state = "stalled"
+        await hub.broadcast({"type": "round_stalled", "round": target_round, "received": len(submissions), "reason": "all_suspicious"})
+        _snapshot_control(cp, storage)
+        return
+
+    cp.global_.state = "aggregating"
+    aggregator = Aggregator()
     suspicious_pct = len(suspicious) / max(1, len(updates))
     aggregated, method = aggregator.aggregate(valid, valid_n, suspicious_pct=suspicious_pct, n_total=len(updates))
 

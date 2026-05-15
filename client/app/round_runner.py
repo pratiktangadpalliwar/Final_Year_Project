@@ -43,6 +43,9 @@ class RoundRunner:
     trainer: _Trainer
     dataset_loader: Callable[[], tuple[torch.Tensor, torch.Tensor]]
     last_round_seen: int = -1
+    # last_dataset_version: tracked for Plan 2 (operator drops new CSV → server bumps
+    # version → runner re-fetches dataset before next round). Plan 1 captures the
+    # dataset once at boot in client.app.main, so a bump won't trigger anything yet.
     last_dataset_version: int = 0
     crashed_once: bool = False
     val_frac: float = 0.15

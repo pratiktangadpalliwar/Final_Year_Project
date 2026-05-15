@@ -19,3 +19,8 @@ dashboard/dist/
 server/app/static/
 .DS_Store
 *.swp
+# block accidental commit of generated/derived CSVs (banks may be ~500MB each).
+# Test fixtures are explicitly whitelisted.
+*.csv
+!tests/shared/golden_inputs/*.csv
+!dataset/*.csv
