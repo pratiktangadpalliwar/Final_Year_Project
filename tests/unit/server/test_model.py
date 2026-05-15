@@ -33,6 +33,7 @@ def test_get_set_weights_roundtrip():
     m1, m2 = FraudDetectionModel(), FraudDetectionModel()
     w = m1.get_weights()
     m2.set_weights(w)
+    # outputs match (eval mode disables BN running-stats updates)
     m1.eval(); m2.eval()
     x = torch.randn(4, INPUT_DIM)
     assert torch.allclose(m1(x), m2(x), atol=1e-6)
