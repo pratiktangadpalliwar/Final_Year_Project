@@ -46,11 +46,12 @@ class Storage:
 
     # ---- listing helpers ----
     def latest_round(self, prefix: str = "models/global_round_") -> int | None:
+        # match round_NNNN with any extension (.pt for weights, .json for checkpoints)
         paginator = self._s3.get_paginator("list_objects_v2")
         max_round = None
         for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix):
             for obj in page.get("Contents", []):
-                m = re.search(r"round_(\d+)\.pt$", obj["Key"])
+                m = re.search(r"round_(\d+)\.\w+$", obj["Key"])
                 if m:
                     r = int(m.group(1))
                     if max_round is None or r > max_round:

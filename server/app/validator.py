@@ -14,7 +14,11 @@ def _flatten(weights: dict[str, torch.Tensor]) -> torch.Tensor:
 
 @dataclass
 class UpdateValidator:
-    norm_bound: float = 10.0
+    # norm_bound is intentionally generous (1000) — banks transmit FULL model
+    # weights, not gradient deltas, so ‖w‖₂ for a 19→64→32→16→1 MLP is naturally
+    # in the tens. The byzantine detector that matters for full-model FL is the
+    # cosine + Krum chain; the norm bound only catches huge corruption.
+    norm_bound: float = 1000.0
     cosine_threshold: float = 0.1
 
     def score(
