@@ -29,10 +29,6 @@ target-version = "py311"
 # Plan 3 cleanup.
 extend-exclude = [
     "dataset/*.csv",
-    "server/*.py",
-    "client/*.py",
-    "helm/**",
-    "terraform/**",
 ]
 
 [tool.ruff.lint]
@@ -40,7 +36,7 @@ select = ["E", "F", "W", "I", "B", "UP", "N"]
 # E501: line length handled by formatter
 # E702: semicolon-joined statements are intentional in compact dataclass mutators
 # N806: tensor variables (X, X_train, X_val) follow ML convention
-ignore = ["E501", "E702", "N806"]
+ignore = ["E501", "E702", "N803", "N806"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

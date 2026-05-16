@@ -5,7 +5,7 @@ If ADMIN_PASSWORD_HASH env var is unset, require_admin is a pass-through
 both ADMIN_PASSWORD_HASH and JWT_SECRET."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
 import jwt
@@ -26,7 +26,7 @@ def verify_password(plaintext: str, hashed: str) -> bool:
 
 
 def issue_cookie(*, secret: str, ttl_minutes: int = 480) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "role": "admin",
         "iat": int(now.timestamp()),
