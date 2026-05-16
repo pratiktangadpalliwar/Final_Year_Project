@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
 from pydantic import BaseModel
 
 from server.app.auth import (
@@ -73,8 +73,15 @@ def build_router(*, cp: ControlPlane, storage: Storage) -> APIRouter:
         return {"bank_id": payload.bank_id, "fault": payload.fault}
 
     @protected.post("/dataset/{bank_id}")
-    def dataset(bank_id: str):
-        raise HTTPException(501, "Task 7.5")
+    async def dataset(bank_id: str, file: UploadFile):
+        max_bytes = Settings().dataset_upload_max_bytes
+        contents = await file.read()
+        if len(contents) > max_bytes:
+            raise HTTPException(413, f"dataset > {max_bytes} bytes")
+        import io as _io
+        storage.put_stream(f"datasets/{bank_id}.csv", _io.BytesIO(contents))
+        cp.bump_dataset_version(bank_id)
+        return {"bank_id": bank_id, "dataset_version": cp.banks[bank_id].dataset_version}
 
     router.include_router(protected)
     return router

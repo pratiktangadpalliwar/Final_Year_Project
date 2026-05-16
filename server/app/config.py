@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     aws_region: str = "us-east-1"
     use_local_storage: bool = False
     local_storage_dir: str = "/tmp/fl-server"
+    dataset_upload_max_bytes: int = 600 * 1024 * 1024  # 600MB cap for /admin/dataset upload
 
     # --- FL hyperparams ---
     min_nodes: int = 3

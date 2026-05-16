@@ -64,3 +64,10 @@ class Storage:
             Params={"Bucket": self.bucket, "Key": key},
             ExpiresIn=expires_s,
         )
+
+    def put_stream(self, key: str, stream, content_length: int | None = None) -> None:
+        """Streams an open file-like (with .read()) to S3 via multipart upload.
+        Used by /admin/dataset upload — avoids loading whole CSV in memory for
+        the boto3 client (the FastAPI handler still buffers in RAM in Plan 2;
+        Plan 3 may switch to streaming chunks)."""
+        self._s3.upload_fileobj(stream, self.bucket, key)
