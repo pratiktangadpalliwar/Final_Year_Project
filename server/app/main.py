@@ -33,7 +33,7 @@ def build_app(start_round_loop: bool = True) -> FastAPI:
     app = FastAPI(title="fl-server")
     app.include_router(client_router.build_router(rm=rm, cp=cp, storage=storage))
     app.include_router(metrics.build_router(rm=rm, cp=cp))
-    app.include_router(admin.build_router())
+    app.include_router(admin.build_router(cp=cp, storage=storage))
     app.include_router(ws.build_router(hub=hub))
 
     if _STATIC_DIR.exists():

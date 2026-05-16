@@ -11,13 +11,15 @@ from server.app.auth import (
     verify_password,
 )
 from server.app.config import Settings
+from server.app.control_plane import ControlPlane
+from server.app.storage import Storage
 
 
 class LoginIn(BaseModel):
     password: str
 
 
-def build_router() -> APIRouter:
+def build_router(*, cp: ControlPlane, storage: Storage) -> APIRouter:
     router = APIRouter(prefix="/admin")
 
     @router.post("/login")
@@ -41,27 +43,30 @@ def build_router() -> APIRouter:
         return {"ok": True}
 
     # The remaining endpoints below this line require admin cookie.
-    protected = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
+    protected = APIRouter(dependencies=[Depends(require_admin)])
 
     @protected.post("/pause")
     def pause():
-        raise HTTPException(501, "implemented in next task")
+        cp.pause()
+        return {"paused": True}
 
     @protected.post("/resume")
     def resume():
-        raise HTTPException(501, "implemented in next task")
+        cp.resume()
+        return {"paused": False}
 
     @protected.post("/reset")
     def reset():
-        raise HTTPException(501, "implemented in next task")
+        cp.reset_rounds()
+        return {"current_round": 0}
 
     @protected.post("/fault")
     def fault():
-        raise HTTPException(501, "implemented in next task")
+        raise HTTPException(501, "Task 7.4")
 
     @protected.post("/dataset/{bank_id}")
     def dataset(bank_id: str):
-        raise HTTPException(501, "implemented in next task")
+        raise HTTPException(501, "Task 7.5")
 
     router.include_router(protected)
     return router

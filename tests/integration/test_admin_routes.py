@@ -39,3 +39,33 @@ def test_logout_clears_cookie(app):
     assert r.status_code == 200
     set_cookie = r.headers.get("set-cookie", "")
     assert "Max-Age=0" in set_cookie or 'max-age=0' in set_cookie.lower()
+
+
+@pytest.mark.integration
+def test_pause_then_resume_changes_cp_state(app):
+    app.post("/admin/login", json={"password": "hunter2"})
+    r = app.post("/admin/pause")
+    assert r.status_code == 200
+    status = app.get("/round/status").json()
+    assert status["paused"] is True
+
+    r = app.post("/admin/resume")
+    assert r.status_code == 200
+    status = app.get("/round/status").json()
+    assert status["paused"] is False
+
+
+@pytest.mark.integration
+def test_pause_requires_cookie(app):
+    r = app.post("/admin/pause")
+    assert r.status_code == 401
+
+
+@pytest.mark.integration
+def test_reset_zeroes_round_counter(app):
+    app.post("/admin/login", json={"password": "hunter2"})
+    cp = app.app.state.cp
+    cp.global_.current_round = 42
+    r = app.post("/admin/reset")
+    assert r.status_code == 200
+    assert cp.global_.current_round == 0
