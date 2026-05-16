@@ -69,16 +69,31 @@ def main() -> None:
         dp_clip_norm=s.dp_clip_norm, dp_sigma=sigma,
     )
 
-    X_train, y_train, X_val, y_val, _ = preprocess(s.dataset_path, val_frac=0.15)
-    X_full = torch.cat([X_train, X_val], dim=0)
-    y_full = torch.cat([y_train, y_val], dim=0)
+    # Cached loader: re-runs preprocess when server-side dataset_version bumps.
+    # Plan 2: the bumped CSV is uploaded to S3 by /admin/dataset; for in-pod
+    # live refresh, the file at s.dataset_path must be re-fetched externally
+    # (Plan 3 helm adds a sidecar). For Plan 2 demo: a CSV swap is reflected
+    # after the pod restarts.
+    cache: dict = {"version": -1, "X": None, "y": None}
+
+    def loader(version: int) -> tuple[torch.Tensor, torch.Tensor]:
+        if cache["version"] != version or cache["X"] is None:
+            _LOG.info("re-loading dataset (version %d)", version)
+            assert_dataset_present(s.dataset_path, min_size_bytes=s.dataset_min_bytes)
+            X_tr, y_tr, X_v, y_v, _ = preprocess(s.dataset_path, val_frac=0.15)
+            cache["X"] = torch.cat([X_tr, X_v], dim=0)
+            cache["y"] = torch.cat([y_tr, y_v], dim=0)
+            cache["version"] = version
+        return cache["X"], cache["y"]
+
+    loader(1)  # warm cache before first tick
 
     runner = RoundRunner(
         bank_id=s.bank_id,
         server=server,
         storage=storage,
         trainer=trainer,
-        dataset_loader=lambda: (X_full, y_full),
+        dataset_loader=loader,
         last_round_seen=-1,
     )
 

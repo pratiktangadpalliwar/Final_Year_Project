@@ -22,7 +22,7 @@ def test_runner_skips_when_no_new_round():
     r = RoundRunner(
         bank_id="bank_01",
         server=server, storage=storage, trainer=trainer,
-        dataset_loader=lambda: (torch.randn(10, 19), torch.zeros(10)),
+        dataset_loader=lambda _v: (torch.randn(10, 19), torch.zeros(10)),
         last_round_seen=0,
     )
     r.tick()
@@ -53,7 +53,7 @@ def test_runner_trains_and_uploads_on_new_round():
     r = RoundRunner(
         bank_id="bank_01",
         server=server, storage=storage, trainer=trainer,
-        dataset_loader=lambda: (X, y),
+        dataset_loader=lambda _v: (X, y),
         last_round_seen=0,
     )
     r.tick()
@@ -75,7 +75,7 @@ def test_runner_crashes_on_crash_fault():
     r = RoundRunner(
         bank_id="bank_01",
         server=server, storage=MagicMock(), trainer=MagicMock(),
-        dataset_loader=lambda: (torch.randn(10, 19), torch.zeros(10)),
+        dataset_loader=lambda _v: (torch.randn(10, 19), torch.zeros(10)),
         last_round_seen=0,
     )
     with pytest.raises(SystemExit):

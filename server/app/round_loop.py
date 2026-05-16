@@ -201,6 +201,11 @@ async def run_round_loop(
         if storage.latest_round(prefix="models/global_round_") is None:
             storage.put_weights("models/global_round_0000.pt", FraudDetectionModel().get_weights())
         target = cp.global_.current_round + 1
+        if target > settings.max_rounds:
+            cp.pause()
+            await hub.broadcast({"type": "event", "level": "info", "msg": f"max_rounds={settings.max_rounds} reached; auto-pause"})
+            await asyncio.sleep(5)
+            continue
         try:
             await run_one_round(rm=rm, cp=cp, storage=storage, hub=hub, settings=settings, target_round=target)
         except Exception:

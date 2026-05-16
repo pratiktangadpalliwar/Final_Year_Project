@@ -41,7 +41,7 @@ class RoundRunner:
     server: _Server
     storage: _Storage
     trainer: _Trainer
-    dataset_loader: Callable[[], tuple[torch.Tensor, torch.Tensor]]
+    dataset_loader: Callable[[int], tuple[torch.Tensor, torch.Tensor]]  # arg = dataset_version
     last_round_seen: int = -1
     # last_dataset_version: tracked for Plan 2 (operator drops new CSV → server bumps
     # version → runner re-fetches dataset before next round). Plan 1 captures the
@@ -66,7 +66,9 @@ class RoundRunner:
         global_info = self.server.get_global(self.bank_id)
         base_weights = self.storage.get_weights_from_url(global_info["weights_url"])
 
-        X, y = self.dataset_loader()
+        version = int(ctrl["dataset_version"])
+        X, y = self.dataset_loader(version)
+        self.last_dataset_version = version
         from sklearn.model_selection import train_test_split
         X_np, y_np = X.numpy(), y.numpy()
         X_tr, X_val, y_tr, y_val = train_test_split(
@@ -97,4 +99,4 @@ class RoundRunner:
             "metrics": result.metrics,
         })
         self.last_round_seen = round_n
-        self.last_dataset_version = int(ctrl["dataset_version"])
+        # last_dataset_version already updated at top of tick after loader call
