@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fl-server
+  namespace: {{ .Values.global.namespace }}
+spec:
+  replicas: {{ .Values.server.replicaCount }}
+  selector:
+    matchLabels: { app: fl-server }
+  template:
+    metadata:
+      labels: { app: fl-server }
+    spec:
+      serviceAccountName: {{ .Values.server.serviceAccountName }}
+      containers:
+        - name: fl-server
+          image: "{{ .Values.global.ecrBase }}/fl-server:{{ .Values.global.imageTag }}"
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8080 }]
+          env:
+            - { name: S3_BUCKET,           value: {{ .Values.global.s3Bucket | quote }} }
+            - { name: AWS_REGION,          value: {{ .Values.global.region | quote }} }
+            - { name: MIN_NODES,           value: {{ .Values.server.config.minNodes | quote }} }
+            - { name: MAX_ROUNDS,          value: {{ .Values.server.config.maxRounds | quote }} }
+            - { name: QUORUM_PCT,          value: {{ .Values.server.config.quorumPct | quote }} }
+            - { name: ROUND_TIMEOUT_S,     value: {{ .Values.server.config.roundTimeoutS | quote }} }
+            - { name: INTER_ROUND_DELAY_S, value: {{ .Values.server.config.interRoundDelayS | quote }} }
+            - { name: ROLLBACK_THRESHOLD,  value: {{ .Values.server.config.rollbackThreshold | quote }} }
+            - { name: DP_EPSILON,          value: {{ .Values.server.config.dpEpsilon | quote }} }
+            - { name: DP_DELTA,            value: {{ .Values.server.config.dpDelta | quote }} }
+            - { name: DP_CLIP_NORM,        value: {{ .Values.server.config.dpClipNorm | quote }} }
+            - { name: JWT_TTL_MINUTES,     value: {{ .Values.server.config.jwtTtlMinutes | quote }} }
+            - name: ADMIN_PASSWORD_HASH
+              valueFrom: { secretKeyRef: { name: fl-server-auth, key: ADMIN_PASSWORD_HASH } }
+            - name: JWT_SECRET
+              valueFrom: { secretKeyRef: { name: fl-server-auth, key: JWT_SECRET } }
+          resources:
+            {{- toYaml .Values.server.resources | nindent 12 }}
+          readinessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 30
+            periodSeconds: 10
