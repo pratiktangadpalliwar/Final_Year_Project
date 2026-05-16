@@ -1,7 +1,5 @@
-import bcrypt
 import jwt
-import pytest
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
 from server.app.auth import (
