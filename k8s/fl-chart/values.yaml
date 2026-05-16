@@ -1,0 +1,64 @@
+global:
+  namespace: fl
+  region: us-east-1
+  accountId: ""              # set at install time
+  s3Bucket: ""               # set at install time
+  imageTag: latest           # overridden by deploy.sh to git SHA
+  ecrBase: ""                # set at install time
+
+admin:
+  passwordHash: ""           # bcrypt hash; deploy.sh generates with python -c 'import bcrypt; ...'
+  jwtSecret: ""              # random hex; deploy.sh generates
+
+server:
+  replicaCount: 1
+  resources:
+    requests: { cpu: "500m", memory: "512Mi" }
+    limits:   { cpu: "2000m", memory: "2Gi" }
+  serviceAccountName: fl-server-sa
+  serviceAccountRoleArn: ""  # set at install time from terraform output
+  config:
+    minNodes: "3"
+    maxRounds: "50"
+    quorumPct: "0.6"
+    roundTimeoutS: "300"
+    interRoundDelayS: "2"
+    rollbackThreshold: "0.05"
+    dpEpsilon: "5.0"
+    dpDelta: "1e-5"
+    dpClipNorm: "0.5"
+    jwtTtlMinutes: "480"
+
+ingress:
+  enabled: true
+  className: alb
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+
+clients:
+  serviceAccountName: fl-client-sa
+  serviceAccountRoleArn: ""  # set at install time
+  resources:
+    requests: { cpu: "500m", memory: "1Gi" }
+    limits:   { cpu: "2000m", memory: "4Gi" }
+  pollIntervalS: "2"
+  localEpochs: "10"
+  batchSize: "512"
+  banks:
+    - id: bank_01_retail_urban
+      name: Retail Urban
+    - id: bank_02_corporate
+      name: Corporate
+    - id: bank_03_regional_rural
+      name: Regional Rural
+    - id: bank_04_neobank_digital
+      name: Neobank Digital
+    - id: bank_05_international
+      name: International
+    - id: bank_06_credit_union
+      name: Credit Union
+    - id: bank_07_investment_premium
+      name: Investment Premium
