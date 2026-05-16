@@ -34,7 +34,8 @@ class Settings(BaseSettings):
     # --- Model ---
     input_dim: int = 19
 
-    # --- Auth (used by Plan 2 dashboard; nullable in Plan 1) ---
-    admin_password_hash: str | None = None
-    jwt_secret: str | None = None
+    # --- Auth ---
+    admin_password_hash: str | None = None  # bcrypt hash; None = auth disabled
+    jwt_secret: str | None = None  # required if admin_password_hash set
+    jwt_ttl_minutes: int = 480  # 8h cookie lifetime
     cors_origin: str = "*"
