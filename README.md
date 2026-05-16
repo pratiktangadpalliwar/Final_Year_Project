@@ -19,11 +19,19 @@ On your laptop:
 ```bash
 git clone https://github.com/pratiktangadpalliwar/Final_Year_Project.git
 cd Final_Year_Project
+
+# Linux / mac / git-bash on Windows:
 ./deploy.sh
+
+# Native PowerShell (Windows):
+.\deploy.ps1
+
 # wait ~25 min, open the URL it printed, log in with the printed admin password
 ```
 
 ## Modes
+
+bash:
 
 | Command | Time | Use |
 |---|---|---|
@@ -31,6 +39,20 @@ cd Final_Year_Project
 | `./deploy.sh --apps-only` | ~5 min | Rebuild images + helm upgrade (no infra change) |
 | `./deploy.sh --datasets-only` | ~2 min | Re-upload 7 bank CSVs to S3 |
 | `./teardown.sh` | ~15 min | Remove everything |
+
+PowerShell (Windows equivalents):
+
+| Command | Equivalent |
+|---|---|
+| `.\deploy.ps1` | full deploy |
+| `.\deploy.ps1 -Mode AppsOnly` | rebuild + helm upgrade |
+| `.\deploy.ps1 -Mode DatasetsOnly` | re-upload CSVs |
+| `.\teardown.ps1` | nuke everything |
+
+First time on Windows you may need to allow script execution:
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
 
 ## Cost
 
