@@ -1,239 +1,123 @@
-# Resilient Federated Learning — Deployment Guide
+# FL Project — Federated Fraud Detection Demo
 
-## Architecture Overview
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Kubernetes (EKS)                         │
-│                                                              │
-│  FL Server Pods (×2, multi-AZ)    Bank Node Pods (×7)        │
-│  ┌─────────────────────┐          ┌────────┐ ┌────────┐      │
-│  │  REST API :8080     │◄────────►│ Bank 1 │ │ Bank 2 │ ...  │
-│  │  FedAvg + Krum      │          │ Docker │ │ Docker │      │
-│  │  Checkpointing      │          └────────┘ └────────┘      │
-│  │  Rollback           │                ↕                    │
-│  └─────────────────────┘         AWS S3 / SQS               │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Bank operator experience:**
-1. Drop `bank_XX.csv` into `/data/input/`
-2. Done — container detects, trains, uploads, notifies server automatically
-
----
+7-bank federated learning demo with operator dashboard. FedAvg + Trimmed-Mean +
+Krum aggregation, Gaussian DP, byzantine fault injection. Single `./deploy.sh`
+stands up the entire stack on AWS.
 
 ## Prerequisites
 
-| Tool        | Version  | Install |
-|-------------|----------|---------|
-| Docker      | ≥ 24     | https://docs.docker.com/get-docker/ |
-| kubectl     | ≥ 1.28   | https://kubernetes.io/docs/tasks/tools/ |
-| Helm        | ≥ 3.13   | https://helm.sh/docs/intro/install/ |
-| Terraform   | ≥ 1.5    | https://developer.hashicorp.com/terraform/install |
-| AWS CLI     | ≥ 2.0    | https://aws.amazon.com/cli/ |
+On your laptop:
+- AWS CLI v2 (logged in: `aws sts get-caller-identity` must succeed)
+- terraform >= 1.6
+- kubectl + helm 3
+- docker (with buildx)
+- python3 + pip
+- node 20+ + npm
 
----
-
-## Option A — Local Testing (Docker Compose, no AWS)
-
-**Fastest way to test the full system locally.**
+## Quick start
 
 ```bash
-# 1. Clone and build
-git clone https://github.com/YOUR_USERNAME/fl-project
-cd fl-project
-docker-compose build
-
-# 2. Start everything
-docker-compose up -d
-
-# 3. Check server is healthy
-curl http://localhost:8080/health
-
-# 4. Trigger training on Bank 01
-#    Copy a bank CSV into the input volume
-docker cp data/bank_01_retail_urban.csv fl-bank-01:/data/input/
-
-# 5. Watch training logs
-docker-compose logs -f fl-bank-01
-
-# 6. Check FL server metrics
-curl http://localhost:8080/metrics | python -m json.tool
-
-# 7. Repeat for other banks
-docker cp data/bank_02_corporate.csv fl-bank-02:/data/input/
-docker cp data/bank_03_regional_rural.csv fl-bank-03:/data/input/
-# ... etc
-
-# 8. Stop
-docker-compose down
+git clone https://github.com/pratiktangadpalliwar/Final_Year_Project.git
+cd Final_Year_Project
+./deploy.sh
+# wait ~25 min, open the URL it printed, log in with the printed admin password
 ```
 
----
+## Modes
 
-## Option B — Production on AWS EKS
+| Command | Time | Use |
+|---|---|---|
+| `./deploy.sh` | ~25 min | Full cold deploy (terraform + images + helm) |
+| `./deploy.sh --apps-only` | ~5 min | Rebuild images + helm upgrade (no infra change) |
+| `./deploy.sh --datasets-only` | ~2 min | Re-upload 7 bank CSVs to S3 |
+| `./teardown.sh` | ~15 min | Remove everything |
 
-### Step 1 — AWS Infrastructure (Terraform)
+## Cost
+
+Roughly $9/day running (3× t3.large + EKS control plane + ALB + S3).
+Teardown drops it to $0. Run `./teardown.sh` after each session.
+
+## Demo flow
+
+1. `./deploy.sh` → wait for URL.
+2. Open the URL, log in. 7 BankCards appear; rounds tick every ~2s.
+3. Global AUC sparkline trends up.
+4. Click **⚠ fault** on `bank_04` → choose `byzantine`. EventLog shows
+   "flagged bank_04" within 1–2 rounds; trust score drops.
+5. Drag a different CSV onto `bank_03` (📂 swap). Dashboard shows
+   `dataset_version` increment; bank trains on new data next round.
+6. **⏸ Pause** for explanation; **▶ Resume** to continue.
+7. `./teardown.sh` when done.
+
+## Architecture
+
+See [`docs/superpowers/specs/2026-05-15-fl-rebuild-design.md`](docs/superpowers/specs/2026-05-15-fl-rebuild-design.md)
+for full design. Plans: [`docs/superpowers/plans/`](docs/superpowers/plans/).
+
+Components:
+- **server** (`server/app/`): FastAPI + Uvicorn. FedAvg aggregator. Differential
+  privacy. Boot-time S3 checkpoint restore. WebSocket fan-out. Bundles React
+  dashboard at `/static`.
+- **client** (`client/app/`): one container per bank. Init container fetches
+  bank's CSV from S3 to emptyDir. Main container preprocesses + trains
+  + uploads weights via boto3 + IRSA.
+- **dashboard** (`dashboard/`): React + Vite + TypeScript. Built into
+  `server/app/static/` at deploy time. Bcrypt + JWT cookie auth.
+- **infra** (`infra/`): Terraform. VPC + EKS + S3 + ECR + IRSA.
+- **k8s/fl-chart** (`k8s/fl-chart/`): Helm chart. 1 server pod + 7 client pods
+  + ALB ingress + NetworkPolicy.
+
+## Local development (no AWS)
 
 ```bash
-cd terraform
+# Run FL loop locally with minio + 3 banks via docker-compose
+docker compose -f tests/e2e/compose.yml up --build
 
-# Configure your variables
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars with your AWS account details
+# Run all unit + integration tests
+pip install -e .[dev] -e ./server -e ./client
+pytest tests/unit tests/integration
 
-# Deploy infrastructure (~10 minutes)
-terraform init
-terraform plan
-terraform apply
-
-# Save outputs for next steps
-terraform output
+# Run dashboard dev server (proxies API to localhost:8080)
+cd dashboard && npm install && npm run dev
 ```
 
-### Step 2 — Build & Push Docker Images
+## Tests
+
+86 unit + integration tests pass without AWS (uses moto for S3).
+2 e2e tests via docker-compose + minio. CI runs all of the above on every push.
+
+## Security posture (demo)
+
+- Single ALB. HTTPS optional (add ACM cert ARN to
+  `values.yaml ingress.annotations` to enable).
+- Single `ADMIN_PASSWORD_HASH` (bcrypt) + JWT cookie. HttpOnly, Secure,
+  SameSite=Strict.
+- IRSA — zero static AWS keys in the cluster.
+- Least-privilege IAM: client SA can read `datasets/*` + `models/*`, write
+  `updates/*` only.
+- Client→Server traffic is ClusterIP-only (no public route). NetworkPolicy
+  restricts pod egress to in-namespace + DNS + HTTPS (S3/ECR).
+- Differential privacy: Gaussian clip+noise at both client and server.
+
+## Project context
+
+Final-year project rebuild of an earlier v1 system. The rebuild solves the v1
+operational issue: bank datasets are now S3-distributed via init containers
+instead of `kubectl cp` into per-pod PVCs. Plans 1/2/3 document the entire
+rebuild. See [`docs/superpowers/`](docs/superpowers/).
+
+## Cluster add-on prerequisite
+
+After `./deploy.sh` runs the first time, you may need to install the AWS Load
+Balancer Controller into the cluster so the ALB Ingress class resolves. Run
+once per cluster:
 
 ```bash
-# Set your Docker Hub username
-export DOCKERHUB_USERNAME=your_username
-
-# Build and push server
-docker build -t $DOCKERHUB_USERNAME/fl-server:latest ./server
-docker push $DOCKERHUB_USERNAME/fl-server:latest
-
-# Build and push client
-docker build -t $DOCKERHUB_USERNAME/fl-client:latest ./client
-docker push $DOCKERHUB_USERNAME/fl-client:latest
+# Replace <CLUSTER> with the cluster name from terraform output
+eksctl utils associate-iam-oidc-provider --cluster <CLUSTER> --approve
+helm repo add eks https://aws.github.io/eks-charts
+helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+  -n kube-system --set clusterName=<CLUSTER> --set serviceAccount.create=true
 ```
 
-### Step 3 — Configure kubectl
-
-```bash
-aws eks update-kubeconfig \
-  --name fl-eks-cluster \
-  --region us-east-1
-```
-
-### Step 4 — Create Secrets
-
-```bash
-kubectl create namespace federated-learning
-
-kubectl create secret generic fl-secrets \
-  --from-literal=AWS_ACCESS_KEY_ID=YOUR_KEY \
-  --from-literal=AWS_SECRET_ACCESS_KEY=YOUR_SECRET \
-  --from-literal=AWS_REGION=us-east-1 \
-  -n federated-learning
-```
-
-### Step 5 — Deploy with Helm
-
-```bash
-cd helm
-
-# Edit values.yaml — set your Docker Hub username, AWS account ID, domain
-helm install fl-project . \
-  --namespace federated-learning \
-  --create-namespace \
-  --set global.dockerUsername=$DOCKERHUB_USERNAME \
-  --set global.awsAccountId=$(aws sts get-caller-identity --query Account --output text) \
-  --wait
-
-# Verify all pods are running
-kubectl get pods -n federated-learning
-```
-
-### Step 6 — Trigger Training (Bank Operator)
-
-```bash
-# Get the PVC name for bank 01
-kubectl get pvc -n federated-learning
-
-# Copy CSV to bank node input volume
-kubectl cp data/bank_01_retail_urban.csv \
-  federated-learning/$(kubectl get pod -n federated-learning -l bank=bank-01-retail-urban -o name):/data/input/
-
-# Watch training
-kubectl logs -f \
-  -n federated-learning \
-  -l bank=bank-01-retail-urban
-```
-
----
-
-## Adding a New Bank Node
-
-```bash
-# 1. Edit helm/values.yaml — add entry to clients list:
-#    - id:    bank_08_new_bank
-#      name:  "New Bank Name"
-#      fault: none
-#      resources: ...
-
-# 2. Upgrade Helm release — new deployment created automatically
-helm upgrade fl-project ./helm -n federated-learning
-
-# 3. Copy CSV to trigger training
-kubectl cp data/bank_08_new_bank.csv \
-  federated-learning/POD_NAME:/data/input/
-```
-
-## Removing a Bank Node
-
-```bash
-# Remove from values.yaml clients list, then:
-helm upgrade fl-project ./helm -n federated-learning
-# Kubernetes removes the deployment and PVC automatically
-```
-
----
-
-## Monitoring
-
-```bash
-# FL Server metrics
-curl http://localhost:8080/metrics
-
-# Round status
-curl http://localhost:8080/round/status
-
-# Manual rollback (if needed)
-curl -X POST http://localhost:8080/admin/rollback \
-  -H "Content-Type: application/json" \
-  -d '{"target_round": 10}'
-
-# Kubernetes dashboard
-kubectl get all -n federated-learning
-
-# Pod logs
-kubectl logs -f deployment/fl-server -n federated-learning
-```
-
----
-
-## GitHub Actions Secrets Required
-
-| Secret | Description |
-|--------|-------------|
-| `DOCKERHUB_USERNAME` | Your Docker Hub username |
-| `DOCKERHUB_TOKEN` | Docker Hub access token |
-| `AWS_ACCESS_KEY_ID` | AWS credentials |
-| `AWS_SECRET_ACCESS_KEY` | AWS credentials |
-| `AWS_REGION` | e.g. us-east-1 |
-| `AWS_ACCOUNT_ID` | 12-digit AWS account ID |
-| `EKS_CLUSTER_NAME` | fl-eks-cluster |
-| `S3_BUCKET` | fl-models-prod |
-
----
-
-## Fault Tolerance Reference
-
-| Bank | Fault Scenario | Round | System Response |
-|------|---------------|-------|-----------------|
-| Bank 01 | Node crash | 25 | Server continues with 6 banks |
-| Bank 02 | Straggler | 15+ | Timeout policy skips late update |
-| Bank 03 | Network partition | 30–38 | Excluded, re-syncs on recovery |
-| Bank 04 | Byzantine | 20+ | Krum aggregation rejects update |
-| Bank 05 | Dropout & rejoin | 18–28 | Excluded, re-admits at round 28 |
-| Bank 06 | None | — | Stable baseline |
-| Bank 07 | None | — | Stable baseline |
+(Future iteration: bundle this into `infra/main.tf` as a `helm_release`.)
