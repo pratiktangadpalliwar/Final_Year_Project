@@ -69,3 +69,19 @@ def test_reset_zeroes_round_counter(app):
     r = app.post("/admin/reset")
     assert r.status_code == 200
     assert cp.global_.current_round == 0
+
+
+@pytest.mark.integration
+def test_fault_byzantine_persists_to_cp(app):
+    app.post("/admin/login", json={"password": "hunter2"})
+    r = app.post("/admin/fault", json={"bank_id": "bank_04", "fault": "byzantine"})
+    assert r.status_code == 200
+    cp = app.app.state.cp
+    assert cp.banks["bank_04"].fault == "byzantine"
+
+
+@pytest.mark.integration
+def test_fault_invalid_value_rejected(app):
+    app.post("/admin/login", json={"password": "hunter2"})
+    r = app.post("/admin/fault", json={"bank_id": "bank_04", "fault": "boom"})
+    assert r.status_code == 422

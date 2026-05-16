@@ -1,6 +1,8 @@
 """Admin endpoints. Plan 2 fills Plan 1 stubs."""
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
@@ -17,6 +19,11 @@ from server.app.storage import Storage
 
 class LoginIn(BaseModel):
     password: str
+
+
+class FaultIn(BaseModel):
+    bank_id: str
+    fault: Literal["none", "crash", "straggle", "byzantine", "partition"]
 
 
 def build_router(*, cp: ControlPlane, storage: Storage) -> APIRouter:
@@ -61,8 +68,9 @@ def build_router(*, cp: ControlPlane, storage: Storage) -> APIRouter:
         return {"current_round": 0}
 
     @protected.post("/fault")
-    def fault():
-        raise HTTPException(501, "Task 7.4")
+    def fault(payload: FaultIn):
+        cp.set_fault(payload.bank_id, payload.fault)
+        return {"bank_id": payload.bank_id, "fault": payload.fault}
 
     @protected.post("/dataset/{bank_id}")
     def dataset(bank_id: str):
