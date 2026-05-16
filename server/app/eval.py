@@ -5,6 +5,7 @@ to s3://<bucket>/validation/val_set.pkl. Plan 1 ships a small synthetic
 fixture for tests; production replaces it via S3."""
 from __future__ import annotations
 
+import pickle
 from dataclasses import dataclass
 
 import numpy as np
@@ -43,3 +44,10 @@ def evaluate(model: torch.nn.Module, X: torch.Tensor, y: np.ndarray) -> GlobalMe
         accuracy=float(accuracy_score(y, y_pred)),
         val_loss=float(log_loss(y, np.clip(proba, 1e-7, 1 - 1e-7), labels=[0, 1])),
     )
+
+
+def load_validation_set(storage) -> tuple[torch.Tensor, np.ndarray]:
+    """Reads validation/val_set.pkl from S3. Returns (X tensor, y numpy)."""
+    raw = storage.get_bytes("validation/val_set.pkl")
+    obj = pickle.loads(raw)  # noqa: S301 — trusted source (we wrote it)
+    return obj["X"], obj["y"]

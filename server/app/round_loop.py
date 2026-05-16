@@ -117,6 +117,55 @@ async def run_one_round(
     for bid in bank_ids:
         rm.add_eps(bid, settings.dp_epsilon)
 
+    # Rollback gate: evaluate candidate model against held-out val_set; if AUC dropped > threshold, abort.
+    eval_metrics: dict[str, float] = {}
+    try:
+        from server.app.eval import evaluate, load_validation_set
+        from server.app.routers.metrics import _global_history
+
+        x_val, y_val = load_validation_set(storage)
+        candidate = FraudDetectionModel()
+        candidate.set_weights(new_global)
+        new_metrics = evaluate(candidate, x_val, y_val)
+
+        prev_auc = None
+        for row in reversed(_global_history):
+            if row.get("auc") is not None:
+                prev_auc = row["auc"]
+                break
+        if target_round > 5 and prev_auc is not None and (new_metrics.auc - prev_auc) < -settings.rollback_threshold:
+            cp.global_.state = "idle"
+            await hub.broadcast({
+                "type": "round_rolled_back",
+                "round": target_round,
+                "prev_auc": prev_auc,
+                "candidate_auc": new_metrics.auc,
+            })
+            _snapshot_control(cp, storage)
+            return
+        eval_metrics = {
+            "auc": new_metrics.auc, "f1": new_metrics.f1, "precision": new_metrics.precision,
+            "recall": new_metrics.recall, "accuracy": new_metrics.accuracy, "val_loss": new_metrics.val_loss,
+        }
+    except KeyError as e:
+        # val_set.pkl missing — eval not configured for this deployment; skip
+        _LOG.warning("eval skipped (no val_set): %s", e)
+    except Exception as e:
+        # Eval errored (NaN logits, shape mismatch, etc.) — treat candidate as
+        # bad and roll back if we have a prior AUC to compare against.
+        _LOG.warning("eval failed: %s — rolling back", e)
+        from server.app.routers.metrics import _global_history
+        has_prev = any(row.get("auc") is not None for row in _global_history)
+        if target_round > 5 and has_prev:
+            cp.global_.state = "idle"
+            await hub.broadcast({
+                "type": "round_rolled_back",
+                "round": target_round,
+                "reason": "eval_failed",
+            })
+            _snapshot_control(cp, storage)
+            return
+
     storage.put_weights(f"models/global_round_{target_round:04d}.pt", new_global)
     rm.current_round = target_round
     storage.put_json(f"checkpoints/round_{target_round:04d}.json", rm.checkpoint_dict())
@@ -129,6 +178,7 @@ async def run_one_round(
         "method": method,
         "n_participants": len(updates),
         "n_suspicious": len(suspicious),
+        **eval_metrics,
     })
     cp.global_.state = "idle"
     _snapshot_control(cp, storage)
