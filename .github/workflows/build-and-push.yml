@@ -1,0 +1,31 @@
+name: build-and-push-ecr
+on:
+  workflow_dispatch:   # manual trigger from Actions tab
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      - uses: aws-actions/amazon-ecr-login@v2
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: Build dashboard
+        run: cd dashboard && npm ci && npm run build
+      - name: Build + push server
+        run: |
+          docker buildx build --platform linux/amd64 \
+            -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/fl-server:${{ github.sha }} \
+            -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/fl-server:latest \
+            --push -f server/Dockerfile .
+      - name: Build + push client
+        run: |
+          docker buildx build --platform linux/amd64 \
+            -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/fl-client:${{ github.sha }} \
+            -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/fl-client:latest \
+            --push -f client/Dockerfile .
