@@ -117,11 +117,12 @@ for ($i = 1; $i -le 40; $i++) {
 }
 
 $Context = (kubectl config current-context)
+$AlbDisplay = if ($Alb) { $Alb } else { "(pending - run: kubectl -n fl get ingress fl-server)" }
 @"
 
 ==============================================================
   fl-demo deployed.
-  Dashboard:   http://$(if ($Alb) { $Alb } else { '<pending>' })/
+  Dashboard:   http://$AlbDisplay/
   Admin pwd:   $AdminPwd
 
   S3 bucket:   s3://$Bucket
