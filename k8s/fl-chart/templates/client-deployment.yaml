@@ -1,0 +1,59 @@
+{{- $g := .Values.global -}}
+{{- $c := .Values.clients -}}
+{{- range $bank := $c.banks }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fl-client-{{ $bank.id | replace "_" "-" }}
+  namespace: {{ $g.namespace }}
+  labels: { app: fl-client, bank: {{ $bank.id }} }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app: fl-client, bank: {{ $bank.id }} }
+  template:
+    metadata:
+      labels: { app: fl-client, bank: {{ $bank.id }} }
+    spec:
+      serviceAccountName: {{ $c.serviceAccountName }}
+      terminationGracePeriodSeconds: 60
+      volumes:
+        - name: work-data
+          emptyDir: { sizeLimit: 2Gi }
+      initContainers:
+        - name: fetch-dataset
+          image: amazon/aws-cli:2
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              aws s3 cp s3://${S3_BUCKET}/datasets/${BANK_ID}.csv /work/data/bank.csv
+              echo "fetched dataset $(wc -c </work/data/bank.csv) bytes"
+          env:
+            - { name: S3_BUCKET,  value: {{ $g.s3Bucket | quote }} }
+            - { name: BANK_ID,    value: {{ $bank.id | quote }} }
+            - { name: AWS_REGION, value: {{ $g.region | quote }} }
+          volumeMounts:
+            - { name: work-data, mountPath: /work/data }
+      containers:
+        - name: fl-client
+          image: "{{ $g.ecrBase }}/fl-client:{{ $g.imageTag }}"
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: BANK_ID,         value: {{ $bank.id | quote }} }
+            - { name: BANK_NAME,       value: {{ $bank.name | quote }} }
+            - { name: S3_BUCKET,       value: {{ $g.s3Bucket | quote }} }
+            - { name: FL_SERVER_URL,   value: "http://fl-server.{{ $g.namespace }}.svc.cluster.local:8080" }
+            - { name: AWS_REGION,      value: {{ $g.region | quote }} }
+            - { name: DATASET_PATH,    value: /work/data/bank.csv }
+            - { name: LOCAL_EPOCHS,    value: {{ $c.localEpochs | quote }} }
+            - { name: BATCH_SIZE,      value: {{ $c.batchSize | quote }} }
+            - { name: POLL_INTERVAL_S, value: {{ $c.pollIntervalS | quote }} }
+          volumeMounts:
+            - { name: work-data, mountPath: /work/data, readOnly: true }
+          resources:
+            {{- toYaml $c.resources | nindent 12 }}
+{{- end }}

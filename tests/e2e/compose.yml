@@ -1,0 +1,117 @@
+services:
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 2s
+      retries: 10
+
+  seed-minio:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb -p local/fl-test &&
+      echo 'bucket ready'
+      "
+    restart: "no"
+
+  fl-server:
+    build:
+      context: ../..
+      dockerfile: server/Dockerfile
+    environment:
+      S3_BUCKET: fl-test
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_ENDPOINT_URL: http://minio:9000
+      MIN_NODES: "3"
+      INTER_ROUND_DELAY_S: "1"
+      ROUND_TIMEOUT_S: "30"
+    depends_on:
+      seed-minio:
+        condition: service_completed_successfully
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health').read()"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  fl-bank-01:
+    build:
+      context: ../..
+      dockerfile: client/Dockerfile
+    environment:
+      BANK_ID: bank_01
+      BANK_NAME: Bank One
+      S3_BUCKET: fl-test
+      FL_SERVER_URL: http://fl-server:8080
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_ENDPOINT_URL: http://minio:9000
+      DATASET_PATH: /work/data/bank.csv
+      DATASET_MIN_BYTES: "1024"
+      LOCAL_EPOCHS: "1"
+      BATCH_SIZE: "32"
+      POLL_INTERVAL_S: "2"
+    volumes:
+      - ../shared/golden_inputs/tiny_bank.csv:/work/data/bank.csv:ro
+    depends_on:
+      fl-server:
+        condition: service_healthy
+
+  fl-bank-02:
+    build: { context: ../.., dockerfile: client/Dockerfile }
+    environment:
+      BANK_ID: bank_02
+      S3_BUCKET: fl-test
+      FL_SERVER_URL: http://fl-server:8080
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_ENDPOINT_URL: http://minio:9000
+      DATASET_PATH: /work/data/bank.csv
+      DATASET_MIN_BYTES: "1024"
+      LOCAL_EPOCHS: "1"
+      BATCH_SIZE: "32"
+      POLL_INTERVAL_S: "2"
+    volumes:
+      - ../shared/golden_inputs/tiny_bank.csv:/work/data/bank.csv:ro
+    depends_on:
+      fl-server:
+        condition: service_healthy
+
+  fl-bank-03:
+    build: { context: ../.., dockerfile: client/Dockerfile }
+    environment:
+      BANK_ID: bank_03
+      S3_BUCKET: fl-test
+      FL_SERVER_URL: http://fl-server:8080
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_ENDPOINT_URL: http://minio:9000
+      DATASET_PATH: /work/data/bank.csv
+      DATASET_MIN_BYTES: "1024"
+      LOCAL_EPOCHS: "1"
+      BATCH_SIZE: "32"
+      POLL_INTERVAL_S: "2"
+    volumes:
+      - ../shared/golden_inputs/tiny_bank.csv:/work/data/bank.csv:ro
+    depends_on:
+      fl-server:
+        condition: service_healthy
